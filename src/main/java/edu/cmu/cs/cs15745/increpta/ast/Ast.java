@@ -2,152 +2,212 @@ package edu.cmu.cs.cs15745.increpta.ast;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Instances of this class represent a full Ast for a program in Java0. An "Ast"
  * consists of a sequence of:
  * <ul>
- * <li>Java functions. (parameters + function bodies)</li>
- * <li>Entry points. (function bodies)</li>
+ * <li>Functions. (A map from function names to function definitions.)
+ * <li>Entry points.
  * </ul>
  */
 public final class Ast {
-	private final List<AstFunction> functions;
-	private final List<AstFunctionBody> entryPoints;
+	private final Map<Variable, Function> functions;
+	private final List<FunctionBody> entryPoints;
 
-	public Ast(List<AstFunction> functions, List<AstFunctionBody> entryPoints) {
-		this.functions = new ArrayList<>(functions);
+	public Ast(List<Function> functions, List<FunctionBody> entryPoints) {
+		this.functions = new HashMap<>();
+		for (Function f : functions) {
+			this.functions.put(f.name(), f);
+		}
 		this.entryPoints = new ArrayList<>(entryPoints);
 	}
 
-	public List<AstFunction> functions() { return functions; }
-	public List<AstFunctionBody> entryPoints() { return entryPoints; }
-	
+	public Map<Variable, Function> functions() {
+		return functions;
+	}
+
+	public List<FunctionBody> entryPoints() {
+		return entryPoints;
+	}
+
 	@Override
 	public String toString() {
-		return join("\n", functions) + join("\n", entryPoints);
+		return join("\n", functions.values()) + join("\n", entryPoints);
 	}
 
 	/**
-	 * An AstFunction is a pair of:
+	 * A Function is a record of:
 	 * <ul>
+	 * <li>The name of the function.</li>
+	 * <li>The type the method is associated with (none for static methods).</li>
 	 * <li>The parameters to the function.</li>
 	 * <li>The body of the function.</li>
 	 * </ul>
 	 */
-	public static final class AstFunction {
-		private final List<AstVariable> params;
-		private final AstFunctionBody body;
+	public static final class Function {
+		private final Variable name;
+		private final Optional<Type> type;
+		private final List<Variable> params;
+		private final FunctionBody body;
 
-		public AstFunction(List<AstVariable> params, AstFunctionBody body) {
+		public Function(Variable name, Optional<Type> type, List<Variable> params, FunctionBody body) {
+			this.name = Objects.requireNonNull(name);
+			this.type = Objects.requireNonNull(type);
 			this.params = new ArrayList<>(params);
-			this.body = body;
+			this.body = Objects.requireNonNull(body);
 		}
 
-		public List<AstVariable> params() { return params; }
-		public AstFunctionBody body() { return body; }
-		
+		public Variable name() {
+			return name;
+		}
+
+		public Optional<Type> type() {
+			return type;
+		}
+
+		public List<Variable> params() {
+			return params;
+		}
+
+		public FunctionBody body() {
+			return body;
+		}
+
 		@Override
 		public String toString() {
-			return String.format("function %s(%s) {\n%s}\n");
+			return String.format("%s::%s(%s) {\n%s}\n", type.map(Object::toString).orElse("static"), name,
+					join(", ", params), body);
 		}
 	}
 
 	/**
 	 * A type is just a string.
 	 */
-	public static final class AstType {
+	public static final class Type {
 		private final String name;
-		public AstType(String name) { this.name = name; }
-		public String name() { return name; }
-		public String toString() { return name; }
+
+		public Type(String name) {
+			this.name = name;
+		}
+
+		public String name() {
+			return name;
+		}
+
+		public String toString() {
+			return name;
+		}
 	}
 
 	/**
 	 * A variable is just a String.
 	 */
-	public static final class AstVariable {
+	public static final class Variable {
 		private final String name;
-		public AstVariable(String name) { this.name = name; }
-		public String name() { return name; }
-		public String toString() { return name; }
+
+		public Variable(String name) {
+			this.name = name;
+		}
+
+		public String name() {
+			return name;
+		}
+
+		public String toString() {
+			return name;
+		}
 	}
 
 	/**
-	 * An AstFunctionBody is just a list of instructions.
+	 * A FunctionBody is just a list of instructions.
 	 */
-	public static final class AstFunctionBody {
-		private final List<AstInstruction> instructions;
+	public static final class FunctionBody {
+		private final List<Instruction> instructions;
 
-		public AstFunctionBody(List<AstInstruction> instructions) {
+		public FunctionBody(List<Instruction> instructions) {
 			this.instructions = new ArrayList<>(instructions);
 		}
 
-		public List<AstInstruction> instructions() {
+		public List<Instruction> instructions() {
 			return instructions;
 		}
-		
+
 		public String toString() {
 			return "\t" + join("\n\t", instructions) + "\n";
 		}
 	}
 
 	/**
-	 * An AstInstruction is one of the following:
+	 * An Instruction is one of the following:
 	 * <ul>
 	 * <li>x = y (simple assignment)</li>
 	 * <li>x = new O (allocation of heap object)</li>
 	 * <li>x.f = y (field write)</li>
 	 * <li>x = y.f (field read)</li>
+	 * <li>x = f(x1, ..., xn) (static method invocation)</li>
 	 * <li>x = y.f(x1, ..., xn) (method invocation)</li>
+	 * <li>return x (return)</li>
 	 * </ul>
 	 */
-	public static abstract class AstInstruction {
+	public static abstract class Instruction {
 		// Disallow external subclassing.
-		private AstInstruction() {}
-		
-		/**
-		 * Use the visitor pattern to return a result based on node type.
-		 */
-		public <T> T accept(Visitor<T> visitor) {
-			if (this instanceof Assignment) return visitor.visitAssignment((Assignment) this);
-			if (this instanceof Allocation) return visitor.visitAllocation((Allocation) this);
-			if (this instanceof FieldWrite) return visitor.visitFieldWrite((FieldWrite) this);
-			if (this instanceof FieldRead)  return visitor.visitFieldRead((FieldRead) this);
-			if (this instanceof Invocation) return visitor.visitInvocation((Invocation) this);
-			throw new IllegalStateException("Impossible: unknown subclass of AstInstruction.");
+		private Instruction() {
 		}
 
 		/**
-		 * Visitor for AstInstruction's fixed set of subclasses.
+		 * Visitor for Instruction's fixed set of subclasses.
 		 */
 		public interface Visitor<T> {
 			T visitAssignment(Assignment a);
+
 			T visitAllocation(Allocation a);
+
 			T visitFieldWrite(FieldWrite fw);
+
 			T visitFieldRead(FieldRead fr);
+
+			T visitStaticInvocation(StaticInvocation i);
+
 			T visitInvocation(Invocation i);
+
+			T visitReturn(Return i);
 		}
+
+		public abstract <T> T accept(Visitor<T> visitor);
 
 		/**
 		 * x = y (simple assignment)
 		 */
-		public static final class Assignment extends AstInstruction {
-			private final AstVariable target;
-			private final AstVariable source;
+		public static final class Assignment extends Instruction {
+			private final Variable target;
+			private final Variable source;
 
 			/**
 			 * target = source
 			 */
-			public Assignment(AstVariable target, AstVariable source) {
-				this.target = target;
-				this.source = source;
+			public Assignment(Variable target, Variable source) {
+				this.target = Objects.requireNonNull(target);
+				this.source = Objects.requireNonNull(source);
 			}
 
-			public AstVariable target() { return target; }
-			public AstVariable source() { return source; }
+			public Variable target() {
+				return target;
+			}
+
+			public Variable source() {
+				return source;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitAssignment(this);
+			}
 
 			@Override
 			public String toString() {
@@ -158,20 +218,29 @@ public final class Ast {
 		/**
 		 * x = new O (allocation of heap object)
 		 */
-		public static final class Allocation extends AstInstruction {
-			private final AstVariable target;
-			private final AstType type;
+		public static final class Allocation extends Instruction {
+			private final Variable target;
+			private final Type type;
 
 			/**
 			 * target = new type
 			 */
-			public Allocation(AstVariable target, AstType type) {
-				this.target = target;
-				this.type = type;
+			public Allocation(Variable target, Type type) {
+				this.target = Objects.requireNonNull(target);
+				this.type = Objects.requireNonNull(type);
 			}
 
-			public AstVariable target() { return target; }
-			public AstType type() { return type; }
+			public Variable target() {
+				return target;
+			}
+
+			public Type type() {
+				return type;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitAllocation(this);
+			}
 
 			@Override
 			public String toString() {
@@ -182,23 +251,35 @@ public final class Ast {
 		/**
 		 * x.f = y (field write)
 		 */
-		public static final class FieldWrite extends AstInstruction {
-			private final AstVariable target;
-			private final AstVariable field;
-			private final AstVariable source;
+		public static final class FieldWrite extends Instruction {
+			private final Variable target;
+			private final Variable field;
+			private final Variable source;
 
 			/**
 			 * target.field = source
 			 */
-			public FieldWrite(AstVariable target, AstVariable field, AstVariable source) {
-				this.target = target;
-				this.field = field;
-				this.source = source;
+			public FieldWrite(Variable target, Variable field, Variable source) {
+				this.target = Objects.requireNonNull(target);
+				this.field = Objects.requireNonNull(field);
+				this.source = Objects.requireNonNull(source);
 			}
 
-			public AstVariable target() { return target; }
-			public AstVariable field() { return field; }
-			public AstVariable source() { return source; }
+			public Variable target() {
+				return target;
+			}
+
+			public Variable field() {
+				return field;
+			}
+
+			public Variable source() {
+				return source;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitFieldWrite(this);
+			}
 
 			@Override
 			public String toString() {
@@ -209,24 +290,36 @@ public final class Ast {
 		/**
 		 * x = y.f (field read)
 		 */
-		public static final class FieldRead extends AstInstruction {
-			private final AstVariable target;
-			private final AstVariable source;
-			private final AstVariable field;
+		public static final class FieldRead extends Instruction {
+			private final Variable target;
+			private final Variable source;
+			private final Variable field;
 
 			/**
 			 * target.field = source
 			 */
-			public FieldRead(AstVariable target, AstVariable source, AstVariable field) {
-				this.target = target;
-				this.source = source;
-				this.field = field;
+			public FieldRead(Variable target, Variable source, Variable field) {
+				this.target = Objects.requireNonNull(target);
+				this.source = Objects.requireNonNull(source);
+				this.field = Objects.requireNonNull(field);
 			}
 
-			public AstVariable target() { return target; }
-			public AstVariable source() { return source; }
-			public AstVariable field() { return field; }
-			
+			public Variable target() {
+				return target;
+			}
+
+			public Variable source() {
+				return source;
+			}
+
+			public Variable field() {
+				return field;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitFieldRead(this);
+			}
+
 			@Override
 			public String toString() {
 				return String.format("%s = %s.%s", target, source, field);
@@ -234,32 +327,115 @@ public final class Ast {
 		}
 
 		/**
-		 * x = y.f(x1, ..., xn) (method invocation
+		 * x = f(x1, ..., xn) (static function invocation)
 		 */
-		public static class Invocation extends AstInstruction {
-			private final AstVariable target;
-			private final AstVariable source;
-			private final AstVariable method;
-			private final List<AstVariable> arguments;
+		public static class StaticInvocation extends Instruction {
+			private final Optional<Variable> target;
+			private final Variable method;
+			private final List<Variable> arguments;
 
 			/**
 			 * target = source.method(...arguments...)
 			 */
-			public Invocation(AstVariable target, AstVariable source, AstVariable method, List<AstVariable> arguments) {
-				this.target = target;
-				this.source = source;
-				this.method = method;
+			public StaticInvocation(Optional<Variable> target, Variable method, List<Variable> arguments) {
+				this.target = Objects.requireNonNull(target);
+				this.method = Objects.requireNonNull(method);
 				this.arguments = Collections.unmodifiableList(new ArrayList<>(arguments));
 			}
 
-			public AstVariable target() { return target; }
-			public AstVariable source() { return source; }
-			public AstVariable method() { return method; }
-			public List<AstVariable> arguments() { return arguments; }
-			
+			public Optional<Variable> target() {
+				return target;
+			}
+
+			public Variable method() {
+				return method;
+			}
+
+			public List<Variable> arguments() {
+				return arguments;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitStaticInvocation(this);
+			}
+
 			@Override
 			public String toString() {
-				return String.format("%s = %s.%s(%s)", target, source, method, join(",", arguments));
+				String call = String.format("%s(%s)", method, join(",", arguments));
+				return target.map(t -> String.format("%s = %s", t, call)).orElse(call);
+			}
+		}
+
+		/**
+		 * x = y.f(x1, ..., xn) (method invocation)
+		 */
+		public static class Invocation extends Instruction {
+			private final Optional<Variable> target;
+			private final Variable source;
+			private final Variable method;
+			private final List<Variable> arguments;
+
+			/**
+			 * target = source.method(...arguments...)
+			 */
+			public Invocation(Optional<Variable> target, Variable source, Variable method, List<Variable> arguments) {
+				this.target = Objects.requireNonNull(target);
+				this.source = Objects.requireNonNull(source);
+				this.method = Objects.requireNonNull(method);
+				this.arguments = Collections.unmodifiableList(new ArrayList<>(arguments));
+			}
+
+			public Optional<Variable> target() {
+				return target;
+			}
+
+			public Variable source() {
+				return source;
+			}
+
+			public Variable method() {
+				return method;
+			}
+
+			public List<Variable> arguments() {
+				return arguments;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitInvocation(this);
+			}
+
+			@Override
+			public String toString() {
+				String call = String.format("%s.%s(%s)", source, method, join(",", arguments));
+				return target.map(t -> String.format("%s = %s", t, call)).orElse(call);
+			}
+		}
+
+		/**
+		 * return x (return)
+		 */
+		public static class Return extends Instruction {
+			private final Variable returned;
+
+			/**
+			 * return returned
+			 */
+			public Return(Variable returned) {
+				this.returned = Objects.requireNonNull(returned);
+			}
+
+			public Variable returned() {
+				return returned;
+			}
+
+			public <T> T accept(Visitor<T> visitor) {
+				return visitor.visitReturn(this);
+			}
+
+			@Override
+			public String toString() {
+				return String.format("return %s", returned);
 			}
 		}
 	}
@@ -267,7 +443,7 @@ public final class Ast {
 	// String.join calling "toString" on each constituent element of the iterable.
 	private static String join(CharSequence delimiter, Iterable<?> iter) {
 		StringBuilder result = new StringBuilder();
-		for (Iterator<?> it = iter.iterator(); it.hasNext(); ) {
+		for (Iterator<?> it = iter.iterator(); it.hasNext();) {
 			result.append(it.next());
 			if (it.hasNext()) {
 				result.append(delimiter);
