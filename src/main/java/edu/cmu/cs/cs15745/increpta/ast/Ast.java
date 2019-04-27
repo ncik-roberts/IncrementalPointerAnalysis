@@ -3,12 +3,16 @@ package edu.cmu.cs.cs15745.increpta.ast;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.AbstractMap.SimpleEntry;
+
+import com.ibm.wala.classLoader.IClass;
+
+import edu.cmu.cs.cs15745.increpta.util.BiMap;
+import static edu.cmu.cs.cs15745.increpta.util.Util.join;
 
 /**
  * Instances of this class represent a full Ast for a program in Java0. An "Ast"
@@ -20,7 +24,7 @@ import java.util.AbstractMap.SimpleEntry;
  */
 public final class Ast {
 	private final Map<Variable, Function> staticFunctions = new HashMap<>();
-	private final Map<Map.Entry<Type, Variable>, Function> instanceMethods = new HashMap<>();
+	private final BiMap<IClass, Variable, Function> instanceMethods = new BiMap<>();
 	private final List<Function> entryPoints;
 
 	public Ast(List<Function> functions, List<Function> entryPoints) {
@@ -28,7 +32,7 @@ public final class Ast {
 			if (f.staticness == Function.Staticness.STATIC) { 
 				staticFunctions.put(f.name(), f);
 			} else {
-				instanceMethods.put(new SimpleEntry<>(f.type(), f.name()), f);
+				instanceMethods.put(f.type().klass(), f.name(), f);
 			}
 		}
 		this.entryPoints = new ArrayList<>(entryPoints);
@@ -37,9 +41,25 @@ public final class Ast {
 	public Function staticFunction(Variable name) {
 		return Objects.requireNonNull(staticFunctions.get(name), name.name());
 	}
+	
+	public Map<Variable, Function> staticFunctions() {
+		return staticFunctions;
+	}
 
 	public Function instanceMethods(Type type, Variable name) {
-		return Objects.requireNonNull(instanceMethods.get(new SimpleEntry<>(type, name)));
+		var klass = type.klass();
+		while (klass != null) {
+			var result = instanceMethods.get(klass, name);
+			if (result != null) {
+				return result;
+			}
+			klass = klass.getSuperclass();
+		}
+		throw new NoSuchElementException(type + "::" + name);
+	}
+
+	public BiMap<IClass, Variable, Function> instanceMethods() {
+		return instanceMethods;
 	}
 
 	public List<Function> entryPoints() {
@@ -115,21 +135,21 @@ public final class Ast {
 	}
 
 	/**
-	 * A type is just a string.
+	 * A type is just a class.
 	 */
 	public static final class Type {
-		private final String name;
+		private final IClass klass;
 
-		public Type(String name) {
-			this.name = name;
+		public Type(IClass klass) {
+			this.klass = klass;
 		}
 
-		public String name() {
-			return name;
+		public IClass klass() {
+			return klass;
 		}
 
 		public String toString() {
-			return name;
+			return klass.getName().toString();
 		}
 	}
 
@@ -532,17 +552,5 @@ public final class Ast {
 				return String.format("return %s", returned);
 			}
 		}
-	}
-
-	// String.join calling "toString" on each constituent element of the iterable.
-	private static String join(CharSequence delimiter, Iterable<?> iter) {
-		StringBuilder result = new StringBuilder();
-		for (Iterator<?> it = iter.iterator(); it.hasNext();) {
-			result.append(it.next());
-			if (it.hasNext()) {
-				result.append(delimiter);
-			}
-		}
-		return result.toString();
 	}
 }

@@ -1,6 +1,5 @@
 package edu.cmu.cs.cs15745.increpta.ast;
 
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -8,9 +7,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
+import com.ibm.wala.classLoader.IClass;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.ipa.callgraph.CGNode;
 import com.ibm.wala.ipa.callgraph.CallGraph;
+import com.ibm.wala.ipa.cha.ClassHierarchy;
 import com.ibm.wala.ssa.IR;
 import com.ibm.wala.ssa.SSAArrayLoadInstruction;
 import com.ibm.wala.ssa.SSAArrayStoreInstruction;
@@ -28,8 +29,10 @@ import com.ibm.wala.ssa.SSAReturnInstruction;
 import com.ibm.wala.types.FieldReference;
 import com.ibm.wala.types.Selector;
 import com.ibm.wala.types.TypeName;
-import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.strings.Atom;
+
+import edu.cmu.cs.cs15745.increpta.util.BiMap;
+import edu.cmu.cs.cs15745.increpta.util.Pair;
 
 /**
  * Utility class from converting a WALA representation of a Java program into
@@ -55,8 +58,8 @@ public final class AstFromWala {
 
 	// Uniquely identify classes
 	private final Map<TypeName, Ast.Type> typeNameToType = new HashMap<>();
-	private Ast.Type type(TypeReference type) {
-		return typeNameToType.computeIfAbsent(type.getName(), name -> new Ast.Type(name.toString()));
+	private Ast.Type type(IClass klass) {
+		return typeNameToType.computeIfAbsent(klass.getName(), name -> new Ast.Type(klass));
 	}
 
 	private final Map<Object, Ast.Variable> tokenToVariable = new HashMap<>();
@@ -65,28 +68,33 @@ public final class AstFromWala {
 	}
 	
 	// Uniquely identify fields
-	private final Map<Map.Entry<TypeName, Atom>, Ast.Variable> fieldToName = new HashMap<>();
+	private final BiMap<TypeName, Atom, Ast.Variable> fieldToName = new BiMap<>();
 	private Ast.Variable field(FieldReference field) {
 		return fieldToName.computeIfAbsent(
-			new AbstractMap.SimpleEntry<>(field.getDeclaringClass().getName(), field.getName()),
-			entry -> new Ast.Variable(entry.getKey() + "::"  + entry.getValue()));
+			Pair.of(field.getDeclaringClass().getName(), field.getName()),
+			pair -> new Ast.Variable(pair.fst() + "::"  + pair.snd()));
 	}
+	
+	private final ClassHierarchy cha;
 
 	/**
 	 * Creates an Ast based on the call graph. Uses the predicate to determine which call graph nodes
 	 * are entry points to the program. The result of the analysis is available as the method "ast".
+	 * We need the class hierarchy for computing superclasses for method resolution.
 	 */
-	public AstFromWala(CallGraph graph, Predicate<CGNode> isEntryPoint) {
+	public AstFromWala(CallGraph graph, ClassHierarchy cha, Predicate<CGNode> isEntryPoint) {
+		this.cha = cha;
 		List<Ast.Function> entryPoints = new ArrayList<>();
 		List<Ast.Function> functions = new ArrayList<>();
 		for (CGNode node : graph) {
 			IMethod method = node.getMethod();
-			Ast.Type type = type(method.getDeclaringClass().getReference());
+			Ast.Type type = type(method.getDeclaringClass());
 			List<Ast.Variable> params = new ArrayList<>();
+			String varPrefix = method.getSignature() + "::"; // For pretty-printing the variable names
 			for (int i = 0; i < method.getNumberOfParameters(); i++) {
-				params.add(new Ast.Variable("param" + i));
+				params.add(new Ast.Variable(varPrefix + "param" + i));
 			}
-			InstructionVisitor visitor = new InstructionVisitor(params);
+			InstructionVisitor visitor = new InstructionVisitor(params, varPrefix);
 
 			IR ir = node.getIR();
 			if (ir != null) {
@@ -95,10 +103,17 @@ public final class AstFromWala {
 
 			// Create function body based on the return of the function.
 			var body = new Ast.FunctionBody(visitor.instructions);
+			if (method.getName().toString().contains("ensureCapacityInternal") || method.getName().toString().contains("toString")) {
+				System.out.println(method);
+				System.out.println(method.isStatic() + " " + method.isClinit() + " " + method.isInit() + " " + method.isNative() + " " + method.isSynthetic() + " " + method.isBridge() + " ");
+			}
 			var staticness = Ast.Function.Staticness.fromBoolean(method.isStatic() || method.isClinit() || method.isInit());
 			Ast.Variable name = staticness == Ast.Function.Staticness.STATIC ?
 					staticMethodName(method.getSignature()) : methodName(method.getSelector());
 			var function = new Ast.Function(name, type, params, body, staticness);
+			if (node.toString().contains("demandpa")) {
+				System.out.println(function);
+			}
 			functions.add(function);
 			if (isEntryPoint.test(node)) {
 				entryPoints.add(function);
@@ -118,17 +133,19 @@ public final class AstFromWala {
 	private final class InstructionVisitor implements IVisitor {
 
 		// The result of building the instructions will be stored here.
-		final List<Ast.Instruction> instructions = new ArrayList<>();
+		private final List<Ast.Instruction> instructions = new ArrayList<>();
 
 		private final Map<Integer, Ast.Variable> variables = new HashMap<>();
 		private Ast.Variable variable(int value) {
-			return variables.computeIfAbsent(value, i -> new Ast.Variable(Integer.toString(i)));
+			return variables.computeIfAbsent(value, i -> new Ast.Variable(varPrefix + i));
 		}
 		private Optional<Ast.Variable> optionalDefVariable(SSAInstruction instruction) {
 			return instruction.hasDef() ? Optional.of(variable(instruction.getDef())) : Optional.empty();
 		}
+		private final String varPrefix;
 
-		InstructionVisitor(List<Ast.Variable> params) {
+		InstructionVisitor(List<Ast.Variable> params, String varPrefix) {
+			this.varPrefix = varPrefix;
 			// Parameters numbered from 1 in Java bytecode
 			for (int i = 0; i < params.size(); i++) {
 				variables.put(i + 1, params.get(i));
@@ -161,7 +178,11 @@ public final class AstFromWala {
 
 		public void visitInvoke(SSAInvokeInstruction instruction) {
 			Optional<Ast.Variable> target = optionalDefVariable(instruction);
-			if (instruction.isDispatch()) { // It's virtual
+            String signature = instruction.getCallSite().getDeclaredTarget().getSignature();
+			boolean isVirtual = instruction.isDispatch()
+					// Some special methods are virtual, but not all...
+					|| (instruction.isSpecial() && !signature.contains("<init>") && !signature.contains("<clinit>"));
+			if (isVirtual) {
 				Ast.Variable method = methodName(instruction.getCallSite().getDeclaredTarget().getSelector());
 				Ast.Variable source = variable(instruction.getReceiver());
 				List<Ast.Variable> arguments = new ArrayList<>();
@@ -200,7 +221,7 @@ public final class AstFromWala {
 			if (instruction.isStatic()) {
 				instructions.add(new Ast.Instruction.Assignment(field, source));
 			} else {
-				Ast.Variable target = variable(instruction.getDef());
+				Ast.Variable target = variable(instruction.getRef());
 				instructions.add(new Ast.Instruction.FieldWrite(target, field, source));
 			}
 		}
@@ -229,8 +250,14 @@ public final class AstFromWala {
 		
 		public void visitNew(SSANewInstruction instruction) {
 			Ast.Variable target = variable(instruction.getDef());
-			Ast.Type type = type(instruction.getConcreteType());
-			instructions.add(new Ast.Instruction.Allocation(target, type));
+			var type = instruction.getConcreteType();
+			IClass klass = cha.lookupClass(type);
+			// Resolution failure.
+			if (klass != null) {
+				instructions.add(new Ast.Instruction.Allocation(target, type(klass)));
+			} else {
+				System.err.println("Failed to resolve: " + type);
+			}
 		}
 		
 		public void visitLoadMetadata(SSALoadMetadataInstruction instruction) {

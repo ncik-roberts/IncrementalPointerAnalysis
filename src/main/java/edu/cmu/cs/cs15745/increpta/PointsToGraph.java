@@ -1,57 +1,93 @@
 package edu.cmu.cs.cs15745.increpta;
 
-import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 
-import edu.cmu.cs.cs15745.increpta.PointsToGraph.AndersenNode.HeapItem;
+import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node.HeapItem;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Function;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Allocation;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Assignment;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.FieldRead;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.FieldWrite;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Invocation;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.StaticInvocation;
+import edu.cmu.cs.cs15745.increpta.util.BiMap;
+import edu.cmu.cs.cs15745.increpta.util.MultiMap;
+import edu.cmu.cs.cs15745.increpta.util.Pair;
+import edu.cmu.cs.cs15745.increpta.util.Util;
 
-public class PointsToGraph<Node> {
+public class PointsToGraph {
 	
 	// Disallow outside instantiation
 	private PointsToGraph() { }
 	
-	private final Map<Node, Set<Node>> graph = new HashMap<>();
+	private final MultiMap<Node, Node> graph = new MultiMap<>();
+	private final MultiMap<Node, HeapItem> pointsTo = new MultiMap<>();
 	
 	/**
 	 * Add directed edge from "from" to "to", returning whether the edge was
 	 * already present.
 	 */
 	public boolean addEdge(Node from, Node to) {
-		return graph.computeIfAbsent(from, unused -> new HashSet<>()).add(to);
+		return graph.getSet(from).add(to);
 	}
 	
-	public Set<Node> reachable(Node from) {
+	Set<HeapItem> pointsTo(Node key) {
+		return pointsTo.getSet(key);
+	}
+			
+	public interface DfsIterator extends Iterator<Node> {
+		void abandonBranch();
+	}
+
+	// Iterator that allows for a dfs branch to be abandoned
+	public DfsIterator dfs(Node from) {
 		Set<Node> seen = new HashSet<>();
 		Deque<Node> toVisit = new ArrayDeque<>();
 		toVisit.add(from);
 		seen.add(from);
-		while (!toVisit.isEmpty()) {
-			Node curr = toVisit.pop();
-			for (Node to : edges(curr)) {
-				if (seen.add(to)) {
-					toVisit.push(to);
+		return new DfsIterator() {
+			Node curr = null;
+			@Override public boolean hasNext() {
+				if (!toVisit.isEmpty()) {
+					return true;
 				}
+				if (curr == null) {
+					return false;
+				}
+				for (Node to : edges(curr)) {
+					if (!seen.contains(to)) {
+						return true;
+					}
+				}
+				return false;
 			}
-		}
-		return seen;
+			@Override public Node next() {
+				if (curr != null) {
+					for (Node to : edges(curr)) {
+						if (seen.add(to)) {
+							toVisit.push(to);
+						}
+					}
+				}
+				curr = toVisit.pop();
+				return curr;
+			}
+			@Override public void abandonBranch() {
+				curr = null;
+			}
+		};
 	}
 	
 	public Iterable<Node> edges(Node from) {
@@ -59,33 +95,27 @@ public class PointsToGraph<Node> {
 		return graph.getOrDefault(from, Collections.emptySet());
 	}
 
-	public static PointsToGraph<AndersenNode> fromAst(Ast ast) {
-		PointsToGraph<AndersenNode> result = new PointsToGraph<>();
+	public static PointsToGraph fromAst(Ast ast) {
+		PointsToGraph result = new PointsToGraph();
 		
 		// Most convenient way to have inner functions.
 		var state = new Object() {
-			Map<Ast.Variable, AndersenNode> variables = new HashMap<>();
-			AndersenNode var(Ast.Variable in) {
-				return variables.computeIfAbsent(in, AndersenNode::variable);
+			Map<Ast.Variable, Node> variables = new HashMap<>();
+			BiMap<Ast.Variable, Ast.Variable, Node> varFields = new BiMap<>();
+			MultiMap<Node, Pair<Ast.Instruction.Invocation, Ast.Variable>> invocationMethodPairs = new MultiMap<>();
+
+			Node var(Ast.Variable in) {
+				return variables.computeIfAbsent(in, Node::variable);
 			}
 
-			Map<Map.Entry<HeapItem, Ast.Variable>, AndersenNode> heapItemFields = new HashMap<>();
-			AndersenNode heapItemField(HeapItem type, Ast.Variable field) {
-				return heapItemFields.computeIfAbsent(
-					new SimpleEntry<>(type, field),
-					entry -> AndersenNode.heapItemField(type, field));
+			Node varFields(Ast.Variable var, Ast.Variable field) {
+				return varFields.computeIfAbsent(
+					Pair.of(var, field),
+					entry -> Node.varFields(var, field));
 			}
 			
-			Map<AndersenNode, Set<HeapItem>> pointsTo = new HashMap<>();
-			// Return true if the mapping wasn't already present.
-			boolean pointTo(AndersenNode key, HeapItem val) {
-				return pointsTo.computeIfAbsent(key, unused -> new HashSet<>()).add(val);
-			}
-			boolean pointToAll(AndersenNode key, Collection<HeapItem> vals) {
-				return pointsTo.computeIfAbsent(key, unused -> new HashSet<>()).addAll(vals);
-			}
-			Set<HeapItem> pointsTo(AndersenNode key) {
-				return pointsTo.getOrDefault(key, new HashSet<>());
+			Set<Pair<Ast.Instruction.Invocation, Ast.Variable>> invocationMethodPairs(Node key) {
+				return invocationMethodPairs.getSet(key);
 			}
 		};
 
@@ -95,21 +125,79 @@ public class PointsToGraph<Node> {
 		
 		// First, construct the base graph
 		var graphConstructor = new Object() {
-			Ast.Instruction.Visitor<?> storingRootsIn(Set<AndersenNode> roots) {
-				return new Ast.Instruction.StatefulVisitor() {
+			
+			// Add the node to the added set if it was added this round.
+			Node lookup(Set<Node> added, Ast.Variable var) {
+				boolean addedThisRound = !state.variables.containsKey(var);
+				Node result = state.var(var);
+				if (addedThisRound) {
+					added.add(result);
+				}
+				return result;
+			}
+
+			// Add the node to the added set if it was added this round.
+			Node lookup(Set<Node> added, Ast.Variable var, Ast.Variable field) {
+				boolean addedThisRound = state.varFields.get(var, field) == null;
+				Node result = state.varFields(var, field);
+				if (addedThisRound) {
+					added.add(result);
+				}
+				return result;
+			}
+			
+			void addEdge(MultiMap<Node, HeapItem> roots, Set<Node> added, Node from, Node to) {
+				result.addEdge(from, to);
+				if (!added.contains(from) && added.contains(to)) {
+					roots.getSet(to).addAll(result.pointsTo(from)); // To propagate
+				}
+			}
+			
+			MultiMap<Node, HeapItem> rootsOf(List<Ast.Instruction> instructions) {
+				MultiMap<Node, HeapItem> roots = new MultiMap<>();
+
+				// Added this round.
+				Set<Node> added = new HashSet<>();
+
+				var visitor = new Ast.Instruction.StatefulVisitor() {
 					// Rule 2
 					@Override
 					public void iterAssignment(Assignment a) {
-						result.addEdge(state.var(a.source()), state.var(a.target()));
+						var source = lookup(added, a.source());
+						var target = lookup(added, a.target());
+						addEdge(roots, added, source, target);
 					}
 					// Rule 1
 					@Override
 					public void iterAllocation(Allocation a) {
 						var heapItem = new HeapItem(a.type());
-						var node = AndersenNode.heapItem(heapItem);
-						state.pointTo(node, heapItem);
-						roots.add(node);
-						result.addEdge(node, state.var(a.target()));
+						var node = Node.heapItem(heapItem);
+						var target = lookup(added, a.target());
+						result.pointsTo(node).add(heapItem);
+					  // Don't call "addEdge" here as an optimization, since we know this adds a single element
+					  // to the points-to set of "target".
+						roots.getSet(target).add(heapItem); // To propagate
+						result.addEdge(node, target);
+					}
+
+					// Rule 4; x.f = y
+					@Override
+					public void iterFieldWrite(FieldWrite fw) {
+						var x = fw.target();
+						var f = fw.field();
+						var y = lookup(added, fw.source());
+						var xf = lookup(added, x, f);
+						addEdge(roots, added, y, xf);
+					}
+
+					// Rule 3; x = y.f
+					@Override
+					public void iterFieldRead(FieldRead fr) {
+						var x = lookup(added, fr.target());
+						var y = fr.source();
+						var f = fr.field();
+						var yf = lookup(added, y, f);
+						addEdge(roots, added, yf, x);
 					}
 					
 					// Rule 5 specialized for static functions
@@ -119,8 +207,9 @@ public class PointsToGraph<Node> {
 						var params = f.params();
 						var args = s.arguments();
 						for (int i = 0; i < params.size(); i++) {
-							// Edge goes from arg to param
-							result.addEdge(state.var(args.get(i)), state.var(params.get(i)));
+							var arg = lookup(added, args.get(i));
+							var param = lookup(added, params.get(i));
+							addEdge(roots, added, arg, param);
 						}
 						
 						// Add edge from return z to target x
@@ -128,11 +217,13 @@ public class PointsToGraph<Node> {
 							var x = state.var(target);
 							for (var ret : f.body().returns()) {
 								var z = state.var(ret.returned());
-								result.addEdge(x, z);
+								addEdge(roots, added, x, z);
 							}
 						});
 					}
 				}.visitor();
+				instructions.forEach(i -> i.accept(visitor));
+				return roots;
 			}
 		};
 		
@@ -152,42 +243,57 @@ public class PointsToGraph<Node> {
 				}
 			}
 
-			// Connect two nodes, returning whether points-to sets were updated.
+			// Connect two nodes.
 			// Also propagate points-to set through dfs.
-			private boolean connect(AndersenNode from, AndersenNode to) {
-				if (result.addEdge(from, to)) {
-					boolean anyUpdated = true;
-					var pointsTo = state.pointsTo(from);
-					for (var node : result.reachable(to)) {
-						anyUpdated |= state.pointToAll(node, pointsTo);
+			private void connect(Node from, Node to) {
+				if (result.addEdge(from, to)) { // This short-circuiting prevents infinite recursion
+					var pointsTo = result.pointsTo(from);
+					for (DfsIterator dfs = result.dfs(to); dfs.hasNext(); ) {
+						var node = dfs.next();
+						if (!result.pointsTo(node).addAll(pointsTo)) {
+							dfs.abandonBranch();
+						}
+						
+						// Propagate to called methods, potentially.
+						for (var pair : state.invocationMethodPairs(node)) {
+							var inv = pair.fst();
+							var method = pair.snd();
+							for (var heapItem : pointsTo) {
+								Ast.Function f = ast.instanceMethods(heapItem.type(), method);
+								connectInvocationToFunction(inv, f);
+							}
+						}
 					}
-					return anyUpdated;
-				} else {
-					return false;
 				}
 			}
+			
+			private void connectInvocationToFunction(Invocation inv, Function f) {
+				var params = f.params();
+				// Arguments includes both o and all of y
+				List<Ast.Variable> args = new ArrayList<>();
+				args.add(inv.source());
+				args.addAll(inv.arguments());
 
-			// Rule 4; x.f = y
-			@Override
-			public void iterFieldWrite(FieldWrite fw) {
-				var x = state.var(fw.target());
-				var f = fw.field();
-				var y = state.var(fw.source());
-				for (var O : state.pointsTo(x)) {
-					var Of = state.heapItemField(O, f);
-					connect(y, Of);
+				for (int i = 0; i < params.size(); i++) {
+					// Edge goes from y to y'
+					var y = state.var(args.get(i));
+					var yPrime = state.var(params.get(i));
+					connect(y, yPrime);
 				}
-			}
-
-			// Rule 3; x = y.f
-			@Override
-			public void iterFieldRead(FieldRead fr) {
-				var x = state.var(fr.target());
-				var y = state.var(fr.source());
-				var f = fr.field();
-				for (var O : state.pointsTo(y)) {
-					var Of = state.heapItemField(O, f);
-					connect(Of, x);
+				
+				// Add edge from return z to target x
+				var target = inv.target();
+				if (target.isPresent()) {
+					var x = state.var(target.get());
+					for (var ret : f.body().returns()) {
+						var z = state.var(ret.returned());
+						connect(z, x);
+					}
+				}
+				
+				// Add to worklist if needed
+				if (seen.add(f)) {
+					workList.add(f);
 				}
 			}
 
@@ -195,35 +301,15 @@ public class PointsToGraph<Node> {
 			@Override
 			public void iterInvocation(Invocation inv) {
 				var o = state.var(inv.source());
-				for (var C : state.pointsTo(o)) {
-					Ast.Function f = ast.instanceMethods(C.type(), inv.method());
-					var params = f.params();
+				var m = inv.method();
+				
+				// Keep track of methods called on this variable so we can properly
+				// add new calls if we encounter it during a future dfs.
+				state.invocationMethodPairs(o).add(Pair.of(inv, m));
+				for (var C : result.pointsTo(o)) {
+					Ast.Function f = ast.instanceMethods(C.type(), m);
 					
-					// Arguments includes both o and all of y
-					List<Ast.Variable> args = new ArrayList<>();
-					args.add(inv.source());
-					args.addAll(inv.arguments());
-
-					for (int i = 0; i < params.size(); i++) {
-						// Edge goes from y to y'
-						var y = state.var(args.get(i));
-						var yPrime = state.var(params.get(i));
-						connect(y, yPrime);
-					}
-					
-					// Add edge from return z to target x
-					if (inv.target().isPresent()) {
-						var x = state.var(inv.target().get());
-						for (var ret : f.body().returns()) {
-							var z = state.var(ret.returned());
-							connect(z, x);
-						}
-					}
-					
-					// Add to worklist if needed
-					if (seen.add(f)) {
-						workList.add(f);
-					}
+					connectInvocationToFunction(inv, f);
 				}
 			}
 		}.visitor();
@@ -231,17 +317,16 @@ public class PointsToGraph<Node> {
 		// Now we use the on-the-fly alg to process the rest.
 		while (!workList.isEmpty()) {
 			var curr = workList.remove();
-			Set<AndersenNode> roots = new HashSet<>();
-			for (var param : curr.params()) {
-				roots.add(state.var(param));
-			}
-			for (var i : curr.body().instructions()) {
-				i.accept(graphConstructor.storingRootsIn(roots));
-			}
-			for (var root : roots) {
-				var rootPointsTo = state.pointsTo(root);
-				for (var reachable : result.reachable(root)) {
-					state.pointToAll(reachable, rootPointsTo);
+			var roots = graphConstructor.rootsOf(curr.body().instructions());
+			System.out.println("Starting dfs from " + roots);
+			for (var pair : roots.entrySet()) {
+				var root = pair.getKey();
+				var patch = pair.getValue();
+				for (DfsIterator dfs = result.dfs(root); dfs.hasNext(); ) {
+					var node = dfs.next();
+					if (!result.pointsTo(node).addAll(patch)) {
+						dfs.abandonBranch();
+					}
 				}
 			}
 			for (var i : curr.body().instructions()) {
@@ -249,7 +334,10 @@ public class PointsToGraph<Node> {
 			}
 		}
 		
-		System.out.println(result.graph);
+		System.out.println("\nPOINTS TO");
+		System.out.println(Util.join("\n\t", result.pointsTo.entrySet()));
+		System.out.println("\nGRAPH");
+		System.out.println(Util.join("\n\t", result.graph.entrySet()));
 		return result;
 	}
 	
@@ -262,9 +350,9 @@ public class PointsToGraph<Node> {
 	 * </ul>
 	 * The type argument is the heap item type.
 	 */
-	public static abstract class AndersenNode {
+	public static abstract class Node {
 		// Disallow external subclassing
-		private AndersenNode() {}
+		private Node() {}
 		
 		public static final class HeapItem {
 			private final Ast.Type type;
@@ -273,20 +361,20 @@ public class PointsToGraph<Node> {
 			}
 			public Ast.Type type() { return type; }
 			public String toString() {
-				return String.format("%s%x", type, hashCode());
+				return String.format("%s#%x", type, hashCode());
 			}
 		}
 		
 		public interface Visitor<T> {
 			T visitHeapItem(HeapItem item);
-			T visitHeapItemField(HeapItem item, Ast.Variable field);
+			T visitField(Ast.Variable item, Ast.Variable field);
 			T visitVariable(Ast.Variable item);
 		}
 
 		public abstract <T> T accept(Visitor<T> visitor);
 		
-		public static AndersenNode variable(Ast.Variable item) {
-			return new AndersenNode() {
+		public static Node variable(Ast.Variable item) {
+			return new Node() {
 				@Override
 				public <S> S accept(Visitor<S> visitor) {
 					return visitor.visitVariable(item);
@@ -298,11 +386,11 @@ public class PointsToGraph<Node> {
 			};
 		}
 
-		public static AndersenNode heapItemField(HeapItem item, Ast.Variable field) {
-			return new AndersenNode() {
+		public static Node varFields(Ast.Variable item, Ast.Variable field) {
+			return new Node() {
 				@Override
 				public <S> S accept(Visitor<S> visitor) {
-					return visitor.visitHeapItemField(item, field);
+					return visitor.visitField(item, field);
 				}
 
 				public String toString() {
@@ -311,8 +399,8 @@ public class PointsToGraph<Node> {
 			};
 		}
 
-		public static AndersenNode heapItem(HeapItem item) {
-			return new AndersenNode() {
+		public static Node heapItem(HeapItem item) {
+			return new Node() {
 				@Override
 				public <S> S accept(Visitor<S> visitor) {
 					return visitor.visitHeapItem(item);
