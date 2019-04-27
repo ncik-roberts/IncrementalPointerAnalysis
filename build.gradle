@@ -1,2 +1,17 @@
 apply plugin: 'java'
 apply plugin: 'eclipse'
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.shrike', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.util', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.core', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.js', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.js.rhino', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.java', version: '1.5.0'
+  compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.java.ecj', version: '1.5.0'
+}

@@ -1,0 +1,2 @@
+rootProject.name = "IncrementalPointerAnalysis"
+include 'com.ibm.wala:com.ibm.wala.core'
