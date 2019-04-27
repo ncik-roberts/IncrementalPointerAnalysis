@@ -46,29 +46,32 @@ public final class Ast {
 	 * A Function is a record of:
 	 * <ul>
 	 * <li>The name of the function.</li>
-	 * <li>The type the method is associated with (none for static methods).</li>
+	 * <li>The type the method is associated with.</li>
 	 * <li>The parameters to the function.</li>
 	 * <li>The body of the function.</li>
+	 * <li>Whether the function is static.</li>
 	 * </ul>
 	 */
 	public static final class Function {
 		private final Variable name;
-		private final Optional<Type> type;
+		private final Type type;
 		private final List<Variable> params;
 		private final FunctionBody body;
+		private final Staticness staticness;
 
-		public Function(Variable name, Optional<Type> type, List<Variable> params, FunctionBody body) {
+		public Function(Variable name, Type type, List<Variable> params, FunctionBody body, Staticness staticness) {
 			this.name = Objects.requireNonNull(name);
 			this.type = Objects.requireNonNull(type);
 			this.params = new ArrayList<>(params);
 			this.body = Objects.requireNonNull(body);
+			this.staticness = Objects.requireNonNull(staticness);
 		}
 
 		public Variable name() {
 			return name;
 		}
 
-		public Optional<Type> type() {
+		public Type type() {
 			return type;
 		}
 
@@ -79,11 +82,26 @@ public final class Ast {
 		public FunctionBody body() {
 			return body;
 		}
+		
+		public Staticness staticness() {
+			return staticness;
+		}
 
 		@Override
 		public String toString() {
-			return String.format("%s::%s(%s) {\n%s}\n", type.map(Object::toString).orElse("static"), name,
-					join(", ", params), body);
+			return String.format("%s::%s::%s(%s) {\n%s}\n", staticness, type, name, join(", ", params), body);
+		}
+
+		public enum Staticness {
+			STATIC, VIRTUAL;
+			public static Staticness fromBoolean(boolean isStatic) {
+				return isStatic ? STATIC : VIRTUAL;
+			}
+
+			@Override
+			public String toString() {
+				return this == STATIC ? "static" : "virtual";
+			}
 		}
 	}
 

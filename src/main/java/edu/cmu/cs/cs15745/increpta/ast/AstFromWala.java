@@ -8,22 +8,27 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
-import com.ibm.wala.classLoader.IClass;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.ipa.callgraph.CGNode;
 import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ssa.IR;
 import com.ibm.wala.ssa.SSAArrayLoadInstruction;
 import com.ibm.wala.ssa.SSAArrayStoreInstruction;
+import com.ibm.wala.ssa.SSACheckCastInstruction;
 import com.ibm.wala.ssa.SSAGetInstruction;
 import com.ibm.wala.ssa.SSAInstruction;
 import com.ibm.wala.ssa.SSAInstruction.IVisitor;
 import com.ibm.wala.ssa.SSAInvokeInstruction;
+import com.ibm.wala.ssa.SSALoadMetadataInstruction;
+import com.ibm.wala.ssa.SSANewInstruction;
+import com.ibm.wala.ssa.SSAPhiInstruction;
+import com.ibm.wala.ssa.SSAPiInstruction;
 import com.ibm.wala.ssa.SSAPutInstruction;
 import com.ibm.wala.ssa.SSAReturnInstruction;
 import com.ibm.wala.types.FieldReference;
 import com.ibm.wala.types.Selector;
 import com.ibm.wala.types.TypeName;
+import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.strings.Atom;
 
 /**
@@ -38,24 +43,39 @@ public final class AstFromWala {
 
 	// Uniquely identify method signatures
 	private final Map<Atom, Ast.Variable> selectorToMethodName = new HashMap<>();
-	private final Ast.Variable methodName(Selector selector) {
+	private Ast.Variable methodName(Selector selector) {
 		return selectorToMethodName.computeIfAbsent(selector.getName(), atom -> new Ast.Variable(atom.toString()));
+	}
+	
+	// Uniquely identify static method signatures
+	private final Map<String, Ast.Variable> signatureToMethodName = new HashMap<>();
+	private Ast.Variable staticMethodName(String signature) {
+		return signatureToMethodName.computeIfAbsent(signature, atom -> new Ast.Variable(atom.toString()));
 	}
 
 	// Uniquely identify classes
-	private final Map<TypeName, Ast.Type> classToTypeName = new HashMap<>();
-	private final Ast.Type type(IClass klass) {
-		return classToTypeName.computeIfAbsent(klass.getName(), name -> new Ast.Type(name.toString()));
+	private final Map<TypeName, Ast.Type> typeNameToType = new HashMap<>();
+	private Ast.Type type(TypeReference type) {
+		return typeNameToType.computeIfAbsent(type.getName(), name -> new Ast.Type(name.toString()));
+	}
+
+	private final Map<Object, Ast.Variable> tokenToVariable = new HashMap<>();
+	private Ast.Variable token(Object token) {
+		return tokenToVariable.computeIfAbsent(token, name -> new Ast.Variable("tok" + tokenToVariable.size()));
 	}
 	
 	// Uniquely identify fields
 	private final Map<Map.Entry<TypeName, Atom>, Ast.Variable> fieldToName = new HashMap<>();
-	private final Ast.Variable field(FieldReference field) {
+	private Ast.Variable field(FieldReference field) {
 		return fieldToName.computeIfAbsent(
 			new AbstractMap.SimpleEntry<>(field.getDeclaringClass().getName(), field.getName()),
 			entry -> new Ast.Variable(entry.getKey() + "::"  + entry.getValue()));
 	}
 
+	/**
+	 * Creates an Ast based on the call graph. Uses the predicate to determine which call graph nodes
+	 * are entry points to the program. The result of the analysis is available as the method "ast".
+	 */
 	public AstFromWala(CallGraph graph, Predicate<CGNode> isEntryPoint) {
 		List<Ast.FunctionBody> entryPoints = new ArrayList<>();
 		List<Ast.Function> functions = new ArrayList<>();
@@ -63,8 +83,7 @@ public final class AstFromWala {
 			IR ir = node.getIR();
 			if (ir == null) continue;
 			IMethod method = node.getMethod();
-			Optional<Ast.Type> type = method.isStatic() ? Optional.empty()
-					: Optional.of(type(method.getDeclaringClass()));
+			Ast.Type type = type(method.getDeclaringClass().getReference());
 			Ast.Variable name = methodName(method.getSelector());
 			List<Ast.Variable> params = new ArrayList<>();
 			for (int i = 0; i < method.getNumberOfParameters(); i++) {
@@ -78,11 +97,15 @@ public final class AstFromWala {
 			if (isEntryPoint.test(node)) {
 				entryPoints.add(body);
 			}
-			functions.add(new Ast.Function(name, type, params, body));
+			Ast.Function.Staticness staticness = Ast.Function.Staticness.fromBoolean(method.isStatic());
+			functions.add(new Ast.Function(name, type, params, body, staticness));
 		}
 		ast = new Ast(functions, entryPoints);
 	}
 
+	/**
+	 * @return The ast calculated from the input call graph.
+	 */
 	public Ast ast() {
 		return ast;
 	}
@@ -90,6 +113,7 @@ public final class AstFromWala {
 	// Visitor that builds a list of instructions.
 	private final class InstructionVisitor implements IVisitor {
 
+		// The result of building the instructions will be stored here.
 		final List<Ast.Instruction> instructions = new ArrayList<>();
 
 		private final Map<Integer, Ast.Variable> variables = new HashMap<>();
@@ -107,31 +131,34 @@ public final class AstFromWala {
 			}
 		}
 
+		// Array loads/stores can just be viewed as assigning to the field "array" of the array instance.
 		public void visitArrayLoad(SSAArrayLoadInstruction instruction) {
-			Ast.Variable target = variable(instruction.getDef());
-			Ast.Variable source = variable(instruction.getArrayRef());
-			instructions.add(new Ast.Instruction.FieldRead(target, source, ARRAY_FIELD));
+			if (!instruction.typeIsPrimitive()) {
+				Ast.Variable target = variable(instruction.getDef());
+				Ast.Variable source = variable(instruction.getArrayRef());
+				instructions.add(new Ast.Instruction.FieldRead(target, source, ARRAY_FIELD));
+			}
 		}
 
 		public void visitArrayStore(SSAArrayStoreInstruction instruction) {
-			Ast.Variable target = variable(instruction.getArrayRef());
-			Ast.Variable source = variable(instruction.getValue());
-			instructions.add(new Ast.Instruction.FieldWrite(target, ARRAY_FIELD, source));
+			if (!instruction.typeIsPrimitive()) {
+				Ast.Variable target = variable(instruction.getArrayRef());
+				Ast.Variable source = variable(instruction.getValue());
+				instructions.add(new Ast.Instruction.FieldWrite(target, ARRAY_FIELD, source));
+			}
 		}
 
 		public void visitReturn(SSAReturnInstruction instruction) {
 			// skip returns of primitive type
-			if (instruction.returnsPrimitiveType() || instruction.returnsVoid()) {
-				return;
-			} else {
+			if (!instruction.returnsPrimitiveType() && !instruction.returnsVoid()) {
 				instructions.add(new Ast.Instruction.Return(variable(instruction.getResult())));
 			}
 		}
 
 		public void visitInvoke(SSAInvokeInstruction instruction) {
 			Optional<Ast.Variable> target = optionalDefVariable(instruction);
-			Ast.Variable method = methodName(instruction.getCallSite().getDeclaredTarget().getSelector());
 			if (instruction.isDispatch()) { // It's virtual
+				Ast.Variable method = methodName(instruction.getCallSite().getDeclaredTarget().getSelector());
 				Ast.Variable source = variable(instruction.getReceiver());
 				List<Ast.Variable> arguments = new ArrayList<>();
 				for (int i = 1; i < instruction.getNumberOfPositionalParameters(); i++) { // Start at 1 to exclude receiver
@@ -139,6 +166,7 @@ public final class AstFromWala {
 				}
 				instructions.add(new Ast.Instruction.Invocation(target, source, method, arguments));
 			} else { // It's static
+				Ast.Variable method = staticMethodName(instruction.getCallSite().getDeclaredTarget().getSignature());
 				List<Ast.Variable> arguments = new ArrayList<>();
 				for (int i = 0; i < instruction.getNumberOfPositionalParameters(); i++) { // Start at 1 to exclude receiver
 					arguments.add(variable(instruction.getUse(i)));
@@ -150,6 +178,8 @@ public final class AstFromWala {
 		public void visitGet(SSAGetInstruction instruction) {
 			Ast.Variable target = variable(instruction.getDef());
 			Ast.Variable field = field(instruction.getDeclaredField());
+			
+			// If the field is static, we can just view ourselves as getting that field directly.
 			if (instruction.isStatic()) {
 				instructions.add(new Ast.Instruction.Assignment(target, field));
 			} else {
@@ -161,6 +191,8 @@ public final class AstFromWala {
 		public void visitPut(SSAPutInstruction instruction) {
 			Ast.Variable field = field(instruction.getDeclaredField());
 			Ast.Variable source = variable(instruction.getVal());
+
+			// If the field is static, we can just view ourselves as writing to that field directly.
 			if (instruction.isStatic()) {
 				instructions.add(new Ast.Instruction.Assignment(field, source));
 			} else {
@@ -168,20 +200,41 @@ public final class AstFromWala {
 				instructions.add(new Ast.Instruction.FieldWrite(target, field, source));
 			}
 		}
+		
+		// Convert y = (C) x into just y = x.
+		public void visitCheckCast(SSACheckCastInstruction instruction) {
+			Ast.Variable target = variable(instruction.getDef());
+			Ast.Variable source = variable(instruction.getVal());
+			instructions.add(new Ast.Instruction.Assignment(target, source));
+		}
 
-		/*
-		 * void visitConversion(SSAConversionInstruction instruction) {} void
-		 * visitComparison(SSAComparisonInstruction instruction) {} void
-		 * visitSwitch(SSASwitchInstruction instruction) {} void
-		 * instruction) {} void visitNew(SSANewInstruction instruction) {} void
-		 * visitThrow(SSAThrowInstruction instruction) {} void
-		 * visitMonitor(SSAMonitorInstruction instruction) {} void
-		 * visitCheckCast(SSACheckCastInstruction instruction) {} void
-		 * visitInstanceof(SSAInstanceofInstruction instruction) {} void
-		 * visitPhi(SSAPhiInstruction instruction) {} void visitPi(SSAPiInstruction
-		 * instruction) {} void visitGetCaughtException(SSAGetCaughtExceptionInstruction
-		 * instruction) {} void visitLoadMetadata(SSALoadMetadataInstruction
-		 * instruction) {}
-		 */
+		// Add an assignment for each incoming phi edge.
+		public void visitPhi(SSAPhiInstruction instruction) {
+			Ast.Variable target = variable(instruction.getDef());
+			for (int i = 0; i < instruction.getNumberOfUses(); i++) {
+				Ast.Variable source = variable(instruction.getUse(i));
+				instructions.add(new Ast.Instruction.Assignment(target, source));
+			}
+		}
+		
+		public void visitPi(SSAPiInstruction instruction) {
+			Ast.Variable target = variable(instruction.getDef());
+			Ast.Variable source = variable(instruction.getVal());
+			instructions.add(new Ast.Instruction.Assignment(target, source));
+		}
+		
+		public void visitNew(SSANewInstruction instruction) {
+			Ast.Variable target = variable(instruction.getDef());
+			Ast.Type type = type(instruction.getConcreteType());
+			instructions.add(new Ast.Instruction.Allocation(target, type));
+		}
+		
+		public void visitLoadMetadata(SSALoadMetadataInstruction instruction) {
+			Ast.Variable target = variable(instruction.getDef());
+			Ast.Variable source = token(instruction.getToken());
+			instructions.add(new Ast.Instruction.Assignment(target, source));
+		}
+
+		// TODO: Handle throw/catch in Java bytecode.
 	}
 }
