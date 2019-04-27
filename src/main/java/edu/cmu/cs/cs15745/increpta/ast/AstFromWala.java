@@ -77,28 +77,32 @@ public final class AstFromWala {
 	 * are entry points to the program. The result of the analysis is available as the method "ast".
 	 */
 	public AstFromWala(CallGraph graph, Predicate<CGNode> isEntryPoint) {
-		List<Ast.FunctionBody> entryPoints = new ArrayList<>();
+		List<Ast.Function> entryPoints = new ArrayList<>();
 		List<Ast.Function> functions = new ArrayList<>();
 		for (CGNode node : graph) {
-			IR ir = node.getIR();
-			if (ir == null) continue;
 			IMethod method = node.getMethod();
 			Ast.Type type = type(method.getDeclaringClass().getReference());
-			Ast.Variable name = methodName(method.getSelector());
 			List<Ast.Variable> params = new ArrayList<>();
 			for (int i = 0; i < method.getNumberOfParameters(); i++) {
 				params.add(new Ast.Variable("param" + i));
 			}
 			InstructionVisitor visitor = new InstructionVisitor(params);
-			ir.visitAllInstructions(visitor);
+
+			IR ir = node.getIR();
+			if (ir != null) {
+				ir.visitAllInstructions(visitor);
+			}
 
 			// Create function body based on the return of the function.
-			Ast.FunctionBody body = new Ast.FunctionBody(visitor.instructions);
+			var body = new Ast.FunctionBody(visitor.instructions);
+			var staticness = Ast.Function.Staticness.fromBoolean(method.isStatic() || method.isClinit() || method.isInit());
+			Ast.Variable name = staticness == Ast.Function.Staticness.STATIC ?
+					staticMethodName(method.getSignature()) : methodName(method.getSelector());
+			var function = new Ast.Function(name, type, params, body, staticness);
+			functions.add(function);
 			if (isEntryPoint.test(node)) {
-				entryPoints.add(body);
+				entryPoints.add(function);
 			}
-			Ast.Function.Staticness staticness = Ast.Function.Staticness.fromBoolean(method.isStatic());
-			functions.add(new Ast.Function(name, type, params, body, staticness));
 		}
 		ast = new Ast(functions, entryPoints);
 	}

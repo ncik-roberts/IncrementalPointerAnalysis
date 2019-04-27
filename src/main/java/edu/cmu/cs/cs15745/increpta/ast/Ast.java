@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.AbstractMap.SimpleEntry;
 
 /**
  * Instances of this class represent a full Ast for a program in Java0. An "Ast"
@@ -18,28 +19,36 @@ import java.util.Optional;
  * </ul>
  */
 public final class Ast {
-	private final Map<Variable, Function> functions;
-	private final List<FunctionBody> entryPoints;
+	private final Map<Variable, Function> staticFunctions = new HashMap<>();
+	private final Map<Map.Entry<Type, Variable>, Function> instanceMethods = new HashMap<>();
+	private final List<Function> entryPoints;
 
-	public Ast(List<Function> functions, List<FunctionBody> entryPoints) {
-		this.functions = new HashMap<>();
+	public Ast(List<Function> functions, List<Function> entryPoints) {
 		for (Function f : functions) {
-			this.functions.put(f.name(), f);
+			if (f.staticness == Function.Staticness.STATIC) { 
+				staticFunctions.put(f.name(), f);
+			} else {
+				instanceMethods.put(new SimpleEntry<>(f.type(), f.name()), f);
+			}
 		}
 		this.entryPoints = new ArrayList<>(entryPoints);
 	}
 
-	public Map<Variable, Function> functions() {
-		return functions;
+	public Function staticFunction(Variable name) {
+		return Objects.requireNonNull(staticFunctions.get(name), name.name());
 	}
 
-	public List<FunctionBody> entryPoints() {
+	public Function instanceMethods(Type type, Variable name) {
+		return Objects.requireNonNull(instanceMethods.get(new SimpleEntry<>(type, name)));
+	}
+
+	public List<Function> entryPoints() {
 		return entryPoints;
 	}
 
 	@Override
 	public String toString() {
-		return join("\n", functions.values()) + join("\n", entryPoints);
+		return join("\n", staticFunctions.values()) + join("\n", instanceMethods.values()) + join("\n", entryPoints);
 	}
 
 	/**
@@ -145,16 +154,32 @@ public final class Ast {
 
 	/**
 	 * A FunctionBody is just a list of instructions.
+	 * We also track returns for convenience.
 	 */
 	public static final class FunctionBody {
-		private final List<Instruction> instructions;
+		private final List<Instruction> instructions = new ArrayList<>();
+		private final List<Instruction.Return> returns = new ArrayList<>();
+
 
 		public FunctionBody(List<Instruction> instructions) {
-			this.instructions = new ArrayList<>(instructions);
+			var visitor = new Instruction.StatefulVisitor() {
+				@Override
+				public void iterReturn(Instruction.Return ret) {
+					returns.add(ret);
+				}
+			}.visitor();
+			for (Instruction i : instructions) {
+				this.instructions.add(i);
+				i.accept(visitor);
+			}
 		}
 
 		public List<Instruction> instructions() {
 			return instructions;
+		}
+		
+		public List<Instruction.Return> returns() {
+			return returns;
 		}
 
 		public String toString() {
@@ -184,18 +209,69 @@ public final class Ast {
 		 */
 		public interface Visitor<T> {
 			T visitAssignment(Assignment a);
-
 			T visitAllocation(Allocation a);
-
 			T visitFieldWrite(FieldWrite fw);
-
 			T visitFieldRead(FieldRead fr);
-
 			T visitStaticInvocation(StaticInvocation i);
-
 			T visitInvocation(Invocation i);
-
 			T visitReturn(Return i);
+		}
+		
+		/**
+		 * Convenience class for unit-returning visitor.
+		 */
+		public static abstract class StatefulVisitor {
+			public void iterAssignment(Assignment a) { }
+			public void iterAllocation(Allocation a) { }
+			public void iterFieldWrite(FieldWrite fw) { }
+			public void iterFieldRead(FieldRead fr) { }
+			public void iterStaticInvocation(StaticInvocation i) { }
+			public void iterInvocation(Invocation i) { }
+			public void iterReturn(Return i) { }
+			public Visitor<?> visitor() {
+				return new Visitor<Object>() {
+					public Object visitAssignment(Assignment a) {
+						iterAssignment(a);
+						return null;
+					}
+
+					@Override
+					public Object visitAllocation(Allocation a) {
+						iterAllocation(a);
+						return null;
+					}
+
+					@Override
+					public Object visitFieldWrite(FieldWrite fw) {
+						iterFieldWrite(fw);
+						return null;
+					}
+
+					@Override
+					public Object visitFieldRead(FieldRead fr) {
+						iterFieldRead(fr);
+						return null;
+					}
+
+					@Override
+					public Object visitStaticInvocation(StaticInvocation i) {
+						iterStaticInvocation(i);
+						return null;
+					}
+
+					@Override
+					public Object visitInvocation(Invocation i) {
+						iterInvocation(i);
+						return null;
+					}
+
+					@Override
+					public Object visitReturn(Return i) {
+						iterReturn(i);
+						return null;
+					}
+				};
+			}
 		}
 
 		public abstract <T> T accept(Visitor<T> visitor);
