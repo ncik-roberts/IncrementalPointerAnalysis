@@ -112,9 +112,6 @@ public final class AstFromWala {
 			if (isEntryPoint.test(node)) {
 				entryPoints.add(function);
 			}
-			if (method.toString().contains("update(")) {
-				System.out.println(function);
-			}
 		}
 		ast = new Ast(functions, entryPoints);
 	}
@@ -181,9 +178,6 @@ public final class AstFromWala {
 					|| (instruction.isSpecial() && !signature.contains("<init>") && !signature.contains("<clinit>"));
 			if (isVirtual) {
 				Ast.Variable method = methodName(instruction.getCallSite().getDeclaredTarget().getSelector());
-				if (signature.toString().contains("update(")) {
-					System.out.println(method);
-				}
 				Ast.Variable source = variable(instruction.getReceiver());
 				List<Ast.Variable> arguments = new ArrayList<>();
 				for (int i = 1; i < instruction.getNumberOfPositionalParameters(); i++) { // Start at 1 to exclude receiver

@@ -54,7 +54,6 @@ class PointsToGraphWithContextBuilder<C> {
 		while (!workList.isEmpty()) {
 			var curr = workList.remove();
 			var roots = new GraphConstructor(curr).calculateRoots();
-			System.out.println("Starting dfs from " + roots);
 			for (var pair : roots.entrySet()) {
 				var root = pair.getKey();
 				var patch = pair.getValue();
