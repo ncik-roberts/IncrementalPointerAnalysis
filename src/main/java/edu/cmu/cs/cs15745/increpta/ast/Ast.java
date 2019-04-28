@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -38,24 +37,28 @@ public final class Ast {
 		this.entryPoints = new ArrayList<>(entryPoints);
 	}
 
-	public Function staticFunction(Variable name) {
-		return Objects.requireNonNull(staticFunctions.get(name), name.name());
+	/**
+	 * Fails if the static method wasn't loaded by the class loader.
+	 */
+	public Optional<Function> staticFunction(Variable name) {
+		return Optional.ofNullable(staticFunctions.get(name));
 	}
 	
 	public Map<Variable, Function> staticFunctions() {
 		return staticFunctions;
 	}
 
-	public Function instanceMethods(Type type, Variable name) {
-		var klass = type.klass();
-		while (klass != null) {
+	/**
+	 * Looking up an instance method can fail, if no superclass has the method.
+	 */
+	public Optional<Function> instanceMethod(Type type, Variable name) {
+		for (var klass = type.klass(); klass != null; klass = klass.getSuperclass()) {
 			var result = instanceMethods.get(klass, name);
 			if (result != null) {
-				return result;
+				return Optional.of(result);
 			}
-			klass = klass.getSuperclass();
 		}
-		throw new NoSuchElementException(type + "::" + name);
+		return Optional.empty();
 	}
 
 	public BiMap<IClass, Variable, Function> instanceMethods() {

@@ -41,13 +41,14 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
 public final class AstFromWala {
 	// field for array loads/stores
 	private static final Ast.Variable ARRAY_FIELD = new Ast.Variable("array");
+	private static final boolean DEBUG = true;
 
 	private final Ast ast;
 
 	// Uniquely identify method signatures
-	private final Map<Atom, Ast.Variable> selectorToMethodName = new HashMap<>();
+	private final Map<Selector, Ast.Variable> selectorToMethodName = new HashMap<>();
 	private Ast.Variable methodName(Selector selector) {
-		return selectorToMethodName.computeIfAbsent(selector.getName(), atom -> new Ast.Variable(atom.toString()));
+		return selectorToMethodName.computeIfAbsent(selector, s -> new Ast.Variable(s.toString()));
 	}
 	
 	// Uniquely identify static method signatures
@@ -103,20 +104,16 @@ public final class AstFromWala {
 
 			// Create function body based on the return of the function.
 			var body = new Ast.FunctionBody(visitor.instructions);
-			if (method.getName().toString().contains("ensureCapacityInternal") || method.getName().toString().contains("toString")) {
-				System.out.println(method);
-				System.out.println(method.isStatic() + " " + method.isClinit() + " " + method.isInit() + " " + method.isNative() + " " + method.isSynthetic() + " " + method.isBridge() + " ");
-			}
 			var staticness = Ast.Function.Staticness.fromBoolean(method.isStatic() || method.isClinit() || method.isInit());
 			Ast.Variable name = staticness == Ast.Function.Staticness.STATIC ?
 					staticMethodName(method.getSignature()) : methodName(method.getSelector());
 			var function = new Ast.Function(name, type, params, body, staticness);
-			if (node.toString().contains("demandpa")) {
-				System.out.println(function);
-			}
 			functions.add(function);
 			if (isEntryPoint.test(node)) {
 				entryPoints.add(function);
+			}
+			if (method.toString().contains("update(")) {
+				System.out.println(function);
 			}
 		}
 		ast = new Ast(functions, entryPoints);
@@ -184,6 +181,9 @@ public final class AstFromWala {
 					|| (instruction.isSpecial() && !signature.contains("<init>") && !signature.contains("<clinit>"));
 			if (isVirtual) {
 				Ast.Variable method = methodName(instruction.getCallSite().getDeclaredTarget().getSelector());
+				if (signature.toString().contains("update(")) {
+					System.out.println(method);
+				}
 				Ast.Variable source = variable(instruction.getReceiver());
 				List<Ast.Variable> arguments = new ArrayList<>();
 				for (int i = 1; i < instruction.getNumberOfPositionalParameters(); i++) { // Start at 1 to exclude receiver
@@ -256,7 +256,7 @@ public final class AstFromWala {
 			if (klass != null) {
 				instructions.add(new Ast.Instruction.Allocation(target, type(klass)));
 			} else {
-				System.err.println("Failed to resolve: " + type);
+				if (DEBUG) System.err.println("Failed to resolve: " + type);
 			}
 		}
 		
