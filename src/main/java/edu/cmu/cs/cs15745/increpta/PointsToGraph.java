@@ -1,90 +1,18 @@
 package edu.cmu.cs.cs15745.increpta;
 
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Set;
-
 import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node.HeapItem;
+import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
-import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
 
 /**
- * Points-to-graph.
- * @param <C> The context associated with each node.
+ * Points-to graph with fixed node type (Node) + context C.
+ * @param <C>
  */
-public class PointsToGraph<C> {
+public class PointsToGraph<C> extends AbstractPointsToGraph<Pair<Node, C>, Pair<HeapItem, C>> {
 	
-	// Disallow outside instantiation
-	private PointsToGraph() { }
-	
-	private final MultiMap<Pair<Node, C>, Pair<Node, C>> graph = new MultiMap<>();
-	private final MultiMap<Pair<Node, C>, Pair<HeapItem, C>> pointsTo = new MultiMap<>();
-	
-	/**
-	 * Add directed edge from "from" to "to", returning whether the edge was
-	 * already present.
-	 */
-	public boolean addEdge(Pair<Node, C> from, Pair<Node, C> to) {
-		return graph.getSet(from).add(to);
-	}
-	
-	public Set<Pair<HeapItem, C>> pointsTo(Pair<Node, C> key) {
-		return pointsTo.getSet(key);
-	}
-			
-	public interface DfsIterator<C> extends Iterator<Pair<Node, C>> {
-		void abandonBranch();
-	}
-
-	// Iterator that allows for a dfs branch to be abandoned
-	public DfsIterator<C> dfs(Pair<Node, C> from) {
-		Set<Pair<Node, C>> seen = new HashSet<>();
-		Deque<Pair<Node, C>> toVisit = new ArrayDeque<>();
-		toVisit.add(from);
-		seen.add(from);
-		return new DfsIterator<>() {
-			Pair<Node, C> curr = null;
-			@Override public boolean hasNext() {
-				if (!toVisit.isEmpty()) {
-					return true;
-				}
-				if (curr == null) {
-					return false;
-				}
-				for (Pair<Node, C> to : edges(curr)) {
-					if (!seen.contains(to)) {
-						return true;
-					}
-				}
-				return false;
-			}
-			@Override public Pair<Node, C> next() {
-				if (curr != null) {
-					for (Pair<Node, C> to : edges(curr)) {
-						if (seen.add(to)) {
-							toVisit.push(to);
-						}
-					}
-				}
-				curr = toVisit.pop();
-				return curr;
-			}
-			@Override public void abandonBranch() {
-				curr = null;
-			}
-		};
-	}
-	
-	public Iterable<Pair<Node, C>> edges(Pair<Node, C> from) {
-		return graph.getOrDefault(from, Collections.emptySet());
-	}
-
 	public static <C> PointsToGraph<C> fromAst(Ast ast, ContextBuilder<C> contextBuilder) {
-		return new PointsToGraphBuilder<C>(ast, new PointsToGraph<>(), contextBuilder).build();
+		return new PointsToGraphWithContextBuilder<>(ast, new PointsToGraph<>(), contextBuilder).build();
 	}
 	
 	/**

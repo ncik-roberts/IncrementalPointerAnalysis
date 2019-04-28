@@ -10,7 +10,6 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 
-import edu.cmu.cs.cs15745.increpta.PointsToGraph.DfsIterator;
 import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node;
 import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node.HeapItem;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
@@ -25,35 +24,15 @@ import edu.cmu.cs.cs15745.increpta.util.BiMap;
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
 
-class PointsToGraphBuilder<C> {
+class PointsToGraphWithContextBuilder<C> {
 	private final Ast ast;
 	private final PointsToGraph<C> result; // The graph we are building
 	private final ContextBuilder<C> contextBuilder; // Strategy for merging contexts and creating new contexts.
-	public PointsToGraphBuilder(Ast ast, PointsToGraph<C> result, ContextBuilder<C> contextBuilder) {
+	public PointsToGraphWithContextBuilder(Ast ast, PointsToGraph<C> result, ContextBuilder<C> contextBuilder) {
 		this.ast = Objects.requireNonNull(ast);
 		this.result = Objects.requireNonNull(result);
 		this.contextBuilder = Objects.requireNonNull(contextBuilder);
 	}
-
-	// Correctly associating nodes with ast elements
-	private Map<Pair<Ast.Variable, C>, Pair<Node, C>> variables = new HashMap<>();
-	private BiMap<Pair<Ast.Variable, Ast.Variable>, C, Pair<Node, C>> varFields = new BiMap<>();
-	private MultiMap<Pair<Node, C>, Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs = new MultiMap<>();
-
-	private Pair<Node, C> var(Ast.Variable in, C ctx) {
-		return variables.computeIfAbsent(Pair.of(in, ctx), unused -> Pair.of(Node.variable(in), ctx));
-	}
-
-	private Pair<Node, C> varFields(Ast.Variable var, Ast.Variable field, C ctx) {
-		return varFields.computeIfAbsent(
-			Pair.of(Pair.of(var, field), ctx),
-			unused -> Pair.of(Node.varFields(var, field), ctx));
-	}
-	
-	private Set<Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs(Pair<Node, C> key) {
-		return invocationMethodPairs.getSet(key);
-	}
-	
 	private boolean alreadyBuilt = false; // Can only be built once
 	public PointsToGraph<C> build() {
 		if (alreadyBuilt) {
@@ -79,7 +58,7 @@ class PointsToGraphBuilder<C> {
 			for (var pair : roots.entrySet()) {
 				var root = pair.getKey();
 				var patch = pair.getValue();
-				for (DfsIterator<C> dfs = result.dfs(root); dfs.hasNext(); ) {
+				for (var dfs = result.dfs(root); dfs.hasNext(); ) {
 					var node = dfs.next();
 					if (!result.pointsTo(node).addAll(patch)) {
 						dfs.abandonBranch();
@@ -92,6 +71,26 @@ class PointsToGraphBuilder<C> {
 		}
 		
 		return result;
+	}
+	
+
+	// Correctly associating nodes with ast elements
+	private Map<Pair<Ast.Variable, C>, Pair<Node, C>> variables = new HashMap<>();
+	private BiMap<Pair<Ast.Variable, Ast.Variable>, C, Pair<Node, C>> varFields = new BiMap<>();
+	private MultiMap<Pair<Node, C>, Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs = new MultiMap<>();
+
+	private Pair<Node, C> var(Ast.Variable in, C ctx) {
+		return variables.computeIfAbsent(Pair.of(in, ctx), unused -> Pair.of(Node.variable(in), ctx));
+	}
+
+	private Pair<Node, C> varFields(Ast.Variable var, Ast.Variable field, C ctx) {
+		return varFields.computeIfAbsent(
+			Pair.of(Pair.of(var, field), ctx),
+			unused -> Pair.of(Node.varFields(var, field), ctx));
+	}
+	
+	private Set<Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs(Pair<Node, C> key) {
+		return invocationMethodPairs.getSet(key);
 	}
 	
 	// Class that contains a visitor for constructing the graph for a list of instructions.
@@ -248,7 +247,7 @@ class PointsToGraphBuilder<C> {
 			private void connect(Pair<Node, C> from, Pair<Node, C> to) {
 				if (result.addEdge(from, to)) { // This short-circuiting prevents infinite recursion
 					var pointsTo = result.pointsTo(from);
-					for (DfsIterator<C> dfs = result.dfs(to); dfs.hasNext(); ) {
+					for (var dfs = result.dfs(to); dfs.hasNext(); ) {
 						var node = dfs.next();
 						if (!result.pointsTo(node).addAll(pointsTo)) {
 							dfs.abandonBranch();
@@ -259,7 +258,7 @@ class PointsToGraphBuilder<C> {
 							var inv = pair.fst().fst();
 							var method = pair.fst().snd();
 							var ctx = pair.snd();
-							for (var heapItem : pointsTo) {
+							for (var heapItem : new ArrayList<>(pointsTo)) {
 								// If lookup succeeds, add the item.
 								ast.instanceMethod(heapItem.fst().type(), method)
 								   .ifPresent(f -> connectInvocationToFunction(inv, f, ctx));
