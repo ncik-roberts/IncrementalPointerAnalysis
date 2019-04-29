@@ -3,6 +3,9 @@ package edu.cmu.cs.cs15745.increpta.util;
 import java.util.Iterator;
 
 public final class Util {
+	public enum Unit {
+		UNIT;
+	}
 	/** String.join calling "toString" on each constituent element of the iterable. */
 	public static String join(CharSequence delimiter, Iterable<?> iter) {
 		StringBuilder result = new StringBuilder();

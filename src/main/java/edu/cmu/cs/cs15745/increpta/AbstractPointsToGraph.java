@@ -21,21 +21,25 @@ public class AbstractPointsToGraph<Node, HeapItem> {
 	
 	private final MultiMap<Node, Node> graph = new MultiMap<>();
 	private final MultiMap<Node, HeapItem> pointsTo = new MultiMap<>();
+	private final Set<Node> nodes = new HashSet<>();
 	
 	/**
 	 * Add directed edge from "from" to "to", returning whether the edge was
 	 * already present.
 	 */
 	public boolean addEdge(Node from, Node to) {
+		nodes.add(from);
+		nodes.add(to);
 		return graph.getSet(from).add(to);
 	}
 	
 	public Set<Node> nodes() {
-		return graph.keySet();
+		return nodes;
 	}
 
+	/** Returns unmodifiable set */
 	public Set<Node> edges(Node from) {
-		return graph.getOrDefault(from, Collections.emptySet());
+		return Collections.unmodifiableSet(graph.getOrDefault(from, Collections.emptySet()));
 	}
 
 	public Set<HeapItem> pointsTo(Node key) {

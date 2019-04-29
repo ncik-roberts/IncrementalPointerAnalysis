@@ -5,24 +5,20 @@ import java.util.List;
 
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Function;
 import edu.cmu.cs.cs15745.increpta.ast.Ast.Variable;
+import edu.cmu.cs.cs15745.increpta.util.Util.Unit;
 
 // Static utility class consisting of different context builders.
 public final class ContextBuilders {
-	private enum Singleton {
-		SINGLETON;
-	}
-	
 	// I don't want ANY context on the nodes. Just always return the same value.
-	public static final ContextBuilder<?> NO_CONTEXT = new ContextBuilder<Singleton>() {
-
+	public static final ContextBuilder<Unit> NO_CONTEXT = new ContextBuilder<>() {
 		@Override
-		public Singleton initial(Function entryPoint) {
-			return Singleton.SINGLETON;
+		public Unit initial(Function entryPoint) {
+			return Unit.UNIT;
 		}
 
 		@Override
-		public Singleton merge(Singleton originalContext, Function call) {
-			return Singleton.SINGLETON;
+		public Unit merge(Unit originalContext, Function call) {
+			return Unit.UNIT;
 		}
 	};
 	
