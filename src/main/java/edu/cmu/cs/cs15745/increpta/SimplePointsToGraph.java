@@ -10,14 +10,17 @@ import java.util.Set;
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 
 /**
- * Points-to-graph.
+ * Points-to-graph that also maintains points-to information at each node.
+ * This points-to graph is not "smart", i.e. it does not automatically update
+ * HeapItems when a new edge is added. For an implementation of PointsToGraph
+ * that does this, 
  * @param <Node> The node type.
  * @param <HeapItem> The heap item type.
  */
-public class AbstractPointsToGraph<Node, HeapItem> implements IPointsToGraph<Node, HeapItem> {
+public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, HeapItem> {
 	
 	// Disallow outside instantiation
-	AbstractPointsToGraph() { }
+	SimplePointsToGraph() { }
 	
 	private final MultiMap<Node, Node> graph = new MultiMap<>();
 	private final MultiMap<Node, HeapItem> pointsTo = new MultiMap<>();

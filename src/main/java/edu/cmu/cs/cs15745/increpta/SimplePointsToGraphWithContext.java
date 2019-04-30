@@ -1,5 +1,7 @@
 package edu.cmu.cs.cs15745.increpta;
 
+import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node.HeapItem;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,31 +12,110 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 
-import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node;
-import edu.cmu.cs.cs15745.increpta.PointsToGraph.Node.HeapItem;
+import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Function;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Allocation;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Assignment;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.FieldRead;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.FieldWrite;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Invocation;
-import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.StaticInvocation;
 import edu.cmu.cs.cs15745.increpta.util.BiMap;
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
 
+/**
+ * Points-to graph with fixed node type (Node) + context C.
+ * @param <C>
+ */
+public class SimplePointsToGraphWithContext<C> extends SimplePointsToGraph<Pair<Node, C>, Pair<HeapItem, C>> {
+	
+	public static <C> SimplePointsToGraphWithContext<C> fromAst(Ast ast, ContextBuilder<C> contextBuilder) {
+		return new PointsToGraphWithContextBuilder<>(ast, new SimplePointsToGraphWithContext<>(), contextBuilder).build();
+	}
+	
+	/**
+	 * One of:
+	 * <ul>
+	 * <li>Abstract heap item</li>
+	 * <li>Field of abstract heap item</li>
+	 * <li>Variable</li>
+	 * </ul>
+	 * The type argument is the heap item type.
+	 */
+	public static abstract class Node {
+		// Disallow external subclassing
+		private Node() {}
+		
+		public static final class HeapItem {
+			private final Ast.Type type;
+			public HeapItem(Ast.Type type) {
+				this.type = type;
+			}
+			public Ast.Type type() { return type; }
+			public String toString() {
+				return String.format("%s#%x", type, hashCode());
+			}
+		}
+		
+		/**
+		 * Visitor for the different kinds of nodes.
+		 * @param <T>
+		 */
+		public interface Visitor<T> {
+			T visitHeapItem(HeapItem item);
+			T visitField(Ast.Variable item, Ast.Variable field);
+			T visitVariable(Ast.Variable item);
+		}
+
+		public abstract <T> T accept(Visitor<T> visitor);
+		
+		public static Node variable(Ast.Variable item) {
+			return new Node() {
+				@Override
+				public <S> S accept(Visitor<S> visitor) {
+					return visitor.visitVariable(item);
+				}
+				
+				public String toString() {
+					return item.toString();
+				}
+			};
+		}
+
+		public static Node varFields(Ast.Variable item, Ast.Variable field) {
+			return new Node() {
+				@Override
+				public <S> S accept(Visitor<S> visitor) {
+					return visitor.visitField(item, field);
+				}
+
+				public String toString() {
+					return item.toString() + "." + field.toString();
+				}
+			};
+		}
+
+		public static Node heapItem(HeapItem item) {
+			return new Node() {
+				@Override
+				public <S> S accept(Visitor<S> visitor) {
+					return visitor.visitHeapItem(item);
+				}
+
+				public String toString() {
+					return item.toString();
+				}
+			};
+		}
+	}
+}
+
 class PointsToGraphWithContextBuilder<C> {
 	private final Ast ast;
-	private final PointsToGraph<C> result; // The graph we are building
+	private final SimplePointsToGraphWithContext<C> result; // The graph we are building
 	private final ContextBuilder<C> contextBuilder; // Strategy for merging contexts and creating new contexts.
-	public PointsToGraphWithContextBuilder(Ast ast, PointsToGraph<C> result, ContextBuilder<C> contextBuilder) {
+	public PointsToGraphWithContextBuilder(Ast ast, SimplePointsToGraphWithContext<C> result, ContextBuilder<C> contextBuilder) {
 		this.ast = Objects.requireNonNull(ast);
 		this.result = Objects.requireNonNull(result);
 		this.contextBuilder = Objects.requireNonNull(contextBuilder);
 	}
 	private boolean alreadyBuilt = false; // Can only be built once
-	public PointsToGraph<C> build() {
+	public SimplePointsToGraphWithContext<C> build() {
 		if (alreadyBuilt) {
 			throw new IllegalStateException("Already called build.");
 		}
@@ -156,12 +237,12 @@ class PointsToGraphWithContextBuilder<C> {
 		private final Ast.Instruction.Visitor<?> rootFinder = new Ast.Instruction.StatefulVisitor() {
 			// Rule 2
 			@Override
-			public void iterAssignment(Assignment a) {
+			public void iterAssignment(Ast.Instruction.Assignment a) {
 				addEdge(lookup(a.source()), lookup(a.target()));
 			}
 			// Rule 1
 			@Override
-			public void iterAllocation(Allocation a) {
+			public void iterAllocation(Ast.Instruction.Allocation a) {
 				var heapItem = new HeapItem(a.type());
 				var heapItemWithCtx = Pair.of(heapItem, context);
 				var node = Pair.of(Node.heapItem(heapItem), context);
@@ -175,19 +256,19 @@ class PointsToGraphWithContextBuilder<C> {
 
 			// Rule 4; x.f = y
 			@Override
-			public void iterFieldWrite(FieldWrite fw) {
+			public void iterFieldWrite(Ast.Instruction.FieldWrite fw) {
 				addEdge(lookup(fw.source()), lookup(fw.target(), fw.field()));
 			}
 
 			// Rule 3; x = y.f
 			@Override
-			public void iterFieldRead(FieldRead fr) {
+			public void iterFieldRead(Ast.Instruction.FieldRead fr) {
 				addEdge(lookup(fr.source(), fr.field()), lookup(fr.target()));
 			}
 			
 			// Rule 5 specialized for static functions
 			@Override
-			public void iterStaticInvocation(StaticInvocation s) {
+			public void iterStaticInvocation(Ast.Instruction.StaticInvocation s) {
 				var optF = ast.staticFunction(s.method());
 				if (optF.isEmpty()) return;
 				var f = optF.get();
@@ -212,11 +293,11 @@ class PointsToGraphWithContextBuilder<C> {
 	private final class OnTheFlyWorkGenerator {
 		
 		// This is where you put work.
-		private final Queue<Pair<Function, C>> workList = new ArrayDeque<>();
-		private final Set<Pair<Function, C>> seen = new HashSet<>();
+		private final Queue<Pair<Ast.Function, C>> workList = new ArrayDeque<>();
+		private final Set<Pair<Ast.Function, C>> seen = new HashSet<>();
 
 		// Processing is visiting each of the instructions in a function.
-		void process(Pair<Function, C> job) {
+		void process(Pair<Ast.Function, C> job) {
 			C currentContext = job.snd();
 			var visitor = new Visitor(currentContext).visitor();
 			job.fst().body().instructions().forEach(i -> i.accept(visitor));
@@ -231,7 +312,7 @@ class PointsToGraphWithContextBuilder<C> {
 			
 			// Might need to add a new static function to the worklist
 			@Override
-			public void iterStaticInvocation(StaticInvocation i) {
+			public void iterStaticInvocation(Ast.Instruction.StaticInvocation i) {
 				var optF = ast.staticFunction(i.method());
 				if (optF.isEmpty()) return;
 				var f = optF.get();
@@ -267,7 +348,7 @@ class PointsToGraphWithContextBuilder<C> {
 				}
 			}
 			
-			private void connectInvocationToFunction(Invocation inv, Function f, C invContext) {
+			private void connectInvocationToFunction(Ast.Instruction.Invocation inv, Ast.Function f, C invContext) {
 				var fContext = contextBuilder.merge(invContext, f);
 				var params = f.params();
 				// Arguments includes both o and all of y
@@ -313,7 +394,7 @@ class PointsToGraphWithContextBuilder<C> {
 
 			// Rule 5: x = o.m(y), calling m(y'){ return z }
 			@Override
-			public void iterInvocation(Invocation inv) {
+			public void iterInvocation(Ast.Instruction.Invocation inv) {
 				var o = var(inv.source(), currentContext);
 				var m = inv.method();
 				
