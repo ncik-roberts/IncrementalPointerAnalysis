@@ -19,12 +19,20 @@ import edu.cmu.cs.cs15745.increpta.util.MultiMap;
  */
 public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, HeapItem> {
 	
+	private final MultiMap<Node, Node> graph;
+	private final MultiMap<Node, HeapItem> pointsTo;
+	private final Set<Node> nodes;
+
 	// Disallow outside instantiation
-	SimplePointsToGraph() { }
-	
-	private final MultiMap<Node, Node> graph = new MultiMap<>();
-	private final MultiMap<Node, HeapItem> pointsTo = new MultiMap<>();
-	private final Set<Node> nodes = new HashSet<>();
+	SimplePointsToGraph() {
+		this(new MultiMap<>(), new MultiMap<>(), new HashSet<>());
+	}
+
+	SimplePointsToGraph(MultiMap<Node, Node> graph, MultiMap<Node, HeapItem> pointsTo, Set<Node> nodes) {
+		this.graph = graph;
+		this.pointsTo = pointsTo;
+		this.nodes = nodes;
+	}
 	
 	/**
 	 * Add directed edge from "from" to "to", returning whether the edge was
@@ -95,5 +103,12 @@ public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, 
 				curr = null;
 			}
 		};
+	}
+	
+	/**
+	 * Clone. Don't care about Cloneable.
+	 */
+	public SimplePointsToGraph<Node, HeapItem> clone() {
+		return new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new HashSet<>(nodes));
 	}
 }

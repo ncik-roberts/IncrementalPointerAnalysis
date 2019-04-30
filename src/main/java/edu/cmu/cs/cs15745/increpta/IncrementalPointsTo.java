@@ -88,6 +88,11 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		public Set<HeapItem> pointsTo(Node key) {
 			return graph.pointsTo(key);
 		}
+		
+		@Override
+		public PointsToGraph<Node, HeapItem> clone() {
+			return graph.clone();
+		}
 	}
 	
 	/** Incrementally update SCC based on add of edge. */

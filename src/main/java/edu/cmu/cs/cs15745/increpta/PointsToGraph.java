@@ -7,4 +7,7 @@ public interface PointsToGraph<Node, HeapItem> {
 	Set<Node> nodes();
 	Set<Node> edges(Node from);
 	Set<HeapItem> pointsTo(Node key);
+	
+	// For testing we require these guys to be cloneable
+	PointsToGraph<Node, HeapItem> clone();
 }
