@@ -14,7 +14,7 @@ import edu.cmu.cs.cs15745.increpta.util.MultiMap;
  * @param <Node> The node type.
  * @param <HeapItem> The heap item type.
  */
-public class AbstractPointsToGraph<Node, HeapItem> {
+public class AbstractPointsToGraph<Node, HeapItem> implements IPointsToGraph<Node, HeapItem> {
 	
 	// Disallow outside instantiation
 	AbstractPointsToGraph() { }
@@ -25,23 +25,28 @@ public class AbstractPointsToGraph<Node, HeapItem> {
 	
 	/**
 	 * Add directed edge from "from" to "to", returning whether the edge was
-	 * already present.
+	 * already present. Just used internally when constructing the graph.
 	 */
+	@Override
 	public boolean addEdge(Node from, Node to) {
 		nodes.add(from);
 		nodes.add(to);
 		return graph.getSet(from).add(to);
 	}
 	
+	/** Returns unmodifiable set. */
+	@Override
 	public Set<Node> nodes() {
-		return nodes;
+		return Collections.unmodifiableSet(nodes);
 	}
 
 	/** Returns unmodifiable set */
+	@Override
 	public Set<Node> edges(Node from) {
 		return Collections.unmodifiableSet(graph.getOrDefault(from, Collections.emptySet()));
 	}
 
+	@Override
 	public Set<HeapItem> pointsTo(Node key) {
 		return pointsTo.getSet(key);
 	}
