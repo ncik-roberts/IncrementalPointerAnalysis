@@ -24,7 +24,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	private final Map<Node, SCC> sccs = new HashMap<>();
 	private final MultiMap<SCC, SCC> edgesForSCC = new MultiMap<>();
 	private final MultiMap<SCC, SCC> reverseEdgesForSCC = new MultiMap<>();
-	IncrementalPointsTo(PointsToGraph<Node, HeapItem> graph) {
+	public IncrementalPointsTo(PointsToGraph<Node, HeapItem> graph) {
 		this.graph = graph;
 	}
 	

@@ -338,7 +338,7 @@ class PointsToGraphWithContextBuilder<C> {
 							var inv = pair.fst().fst();
 							var method = pair.fst().snd();
 							var ctx = pair.snd();
-							for (var heapItem : new ArrayList<>(pointsTo)) {
+							for (var heapItem : List.copyOf(pointsTo)) {
 								// If lookup succeeds, add the item.
 								ast.instanceMethod(heapItem.fst().type(), method)
 								   .ifPresent(f -> connectInvocationToFunction(inv, f, ctx));
@@ -401,7 +401,7 @@ class PointsToGraphWithContextBuilder<C> {
 				// Keep track of methods called on this variable so we can properly
 				// add new calls if we encounter it during a future dfs.
 				invocationMethodPairs(o).add(Pair.of(Pair.of(inv, m), currentContext));
-				for (var pair : result.pointsTo(o)) {
+				for (var pair : List.copyOf(result.pointsTo(o))) {
 					var heapItem = pair.fst();
 					ast.instanceMethod(heapItem.type(), m)
 					   .ifPresent(f -> connectInvocationToFunction(inv, f, currentContext));
