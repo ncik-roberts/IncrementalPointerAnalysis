@@ -112,8 +112,8 @@ public final class Benchmarker {
 	// based on the run.
 	private <C> void testNode(
 			Ast.FunctionBody body,
-			PointsToGraph<Pair<Node, C>, Pair<HeapItem, C>> pag, // Run incremental add / delete
-			PointsToGraph<Pair<Node, C>, Pair<HeapItem, C>> pagCopy, // Check correctness
+			PointsToGraph<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> pag, // Run incremental add / delete
+			PointsToGraph<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> pagCopy, // Check correctness
 			SimplePointsToGraphWithContextBuilder<C> builder, // Convert ast instruction to graph nodes
 			TestState state) {
 		for (var inst : body.instructions()) {
@@ -123,14 +123,14 @@ public final class Benchmarker {
 
 			state.totalInstructions++;
 			
-			var edges = builder.affectedNodes(inst);
+			var edges = builder.affectedEdges(inst);
 			Set<Pair<Node, C>> affectedNodes = new HashSet<>();
 
 			/******** DELETION CITY ********/
 			System.out.println("Deleting SSA Instruction: " + inst);
 			long deletePointMS = System.currentTimeMillis();
 			for (var edge : edges) {
-				affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
+				// affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
 			}
 			long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
 
@@ -138,7 +138,7 @@ public final class Benchmarker {
 			System.out.println("Adding SSA Instruction: " + inst);
 			long addPointMS = System.currentTimeMillis();
 			for (var edge : edges) {
-				affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
+				// affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
 			}
 			long addTimeMS = System.currentTimeMillis() - addPointMS;
 			

@@ -9,13 +9,22 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node;
-import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node.HeapItem;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Allocation;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Assignment;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.FieldRead;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.FieldWrite;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Invocation;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.Return;
+import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.StaticInvocation;
 import edu.cmu.cs.cs15745.increpta.util.BiMap;
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
+import edu.cmu.cs.cs15745.increpta.util.Util;
 
 /**
  * Create a simple points-to-graph from an AST with context C.
@@ -72,18 +81,29 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 	
 
 	// Correctly associating nodes with ast elements
-	private Map<Pair<Ast.Variable, C>, Pair<Node, C>> variables = new HashMap<>();
-	private BiMap<Pair<Ast.Variable, Ast.Variable>, C, Pair<Node, C>> varFields = new BiMap<>();
+	private Map<Ast.Variable, Node> variables = new HashMap<>();
+	private Map<Ast.Instruction.Allocation, Node> heapItems = new HashMap<>();
+	private BiMap<Ast.Variable, Ast.Variable, Node> varFields = new BiMap<>();
 	private MultiMap<Pair<Node, C>, Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs = new MultiMap<>();
 
+	private MultiMap<Node, C> contextsForNode = new MultiMap<>();
+
+	private Pair<Node, C> heapItem(Ast.Instruction.Allocation item, C ctx) {
+        var node = heapItems.computeIfAbsent(item, Node::heapItem);
+		contextsForNode.getSet(node).add(ctx);
+		return Pair.of(node, ctx);
+	}
+
 	private Pair<Node, C> var(Ast.Variable in, C ctx) {
-		return variables.computeIfAbsent(Pair.of(in, ctx), unused -> Pair.of(Node.variable(in), ctx));
+        var node = variables.computeIfAbsent(in, Node::variable);
+		contextsForNode.getSet(node).add(ctx);
+		return Pair.of(node, ctx);
 	}
 
 	private Pair<Node, C> varFields(Ast.Variable var, Ast.Variable field, C ctx) {
-		return varFields.computeIfAbsent(
-			Pair.of(Pair.of(var, field), ctx),
-			unused -> Pair.of(Node.varFields(var, field), ctx));
+		var node = varFields.computeIfAbsent(Pair.of(var, field), unused -> Node.varFields(var, field));
+		contextsForNode.getSet(node).add(ctx);
+		return Pair.of(node, ctx);
 	}
 	
 	private Set<Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs(Pair<Node, C> key) {
@@ -99,14 +119,14 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			context = job.snd();
 		}
 
-		private final MultiMap<Pair<Node, C>, Pair<HeapItem, C>> roots = new MultiMap<>();
+		private final MultiMap<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> roots = new MultiMap<>();
 
 		// Added this round.
 		private final Set<Pair<Node, C>> added = new HashSet<>();
 
 		// Add the node to the added set if it was added this round.
 		Pair<Node, C> lookup(Ast.Variable var) {
-			boolean addedThisRound = !variables.containsKey(Pair.of(var, context));
+			boolean addedThisRound = !variables.containsKey(var) || !contextsForNode.containsKey(variables.get(var));
 			Pair<Node, C> result = var(var, context);
 			if (addedThisRound) {
 				added.add(result);
@@ -116,7 +136,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 
 		// Add the node to the added set if it was added this round.
 		Pair<Node, C> lookup(Ast.Variable var, Ast.Variable field) {
-			boolean addedThisRound = varFields.get(Pair.of(var, field), context) == null;
+			boolean addedThisRound = varFields.get(var, field) == null || !contextsForNode.containsKey(varFields.get(var, field));
 			Pair<Node, C> result = varFields(var, field, context);
 			if (addedThisRound) {
 				added.add(result);
@@ -139,7 +159,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 		 * The client of this function should likely use DFS to add heapItems to
 		 * all nodes reachable from the root nodes.
 		 */
-		MultiMap<Pair<Node, C>, Pair<HeapItem, C>> calculateRoots() {
+		MultiMap<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> calculateRoots() {
 			if (alreadyRun) {
 				throw new IllegalStateException("already run calculateRoots");
 			}
@@ -160,14 +180,12 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			// Rule 1
 			@Override
 			public void iterAllocation(Ast.Instruction.Allocation a) {
-				var heapItem = new HeapItem(a.type());
-				var heapItemWithCtx = Pair.of(heapItem, context);
-				var node = Pair.of(Node.heapItem(heapItem), context);
+				var node = heapItem(a, context);
 				var target = lookup(a.target());
-				result.pointsTo(node).add(heapItemWithCtx);
+				result.pointsTo(node).add(Pair.of(a, context));
 			  // Don't call "addEdge" here as an optimization, since we know this adds a single element
 			  // to the points-to set of "target".
-				roots.getSet(target).add(heapItemWithCtx); // To propagate
+				roots.getSet(target).add(Pair.of(a, context)); // To propagate
 				result.addEdge(node, target);
 			}
 
@@ -325,5 +343,66 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Get the edges involved in the instruction.
+	 */
+	public Set<Pair<Pair<Node, C>, Pair<Node, C>>> affectedEdges(Instruction inst) {
+		Set<Pair<Node, Node>> result = inst.accept(new Instruction.Visitor<>() {
+			@Override
+			public Set<Pair<Node, Node>> visitAssignment(Assignment a) {
+				return Set.of(Pair.of(variables.get(a.source()), variables.get(a.target())));
+			}
+
+			@Override
+			public Set<Pair<Node, Node>> visitAllocation(Allocation a) {
+				return Set.of(Pair.of(heapItems.get(a), variables.get(a.target())));
+			}
+
+			@Override
+			public Set<Pair<Node, Node>> visitFieldWrite(FieldWrite fw) {
+				return Set.of(Pair.of(variables.get(fw.source()), varFields.get(fw.target(), fw.field())));
+			}
+
+			@Override
+			public Set<Pair<Node, Node>> visitFieldRead(FieldRead fr) {
+				return Set.of(Pair.of(varFields.get(fr.source(), fr.field()), variables.get(fr.target())));
+			}
+
+			// TODO: add functions
+			@Override
+			public Set<Pair<Node, Node>> visitStaticInvocation(StaticInvocation i) {
+				return Set.of();
+			}
+
+			@Override
+			public Set<Pair<Node, Node>> visitInvocation(Invocation i) {
+				return Set.of();
+			}
+
+			@Override
+			public Set<Pair<Node, Node>> visitReturn(Return i) {
+				return Set.of();
+			}
+		});
+		
+		// Flatmap over all contexts for each returned node.
+		return result
+			.stream()
+			.flatMap(pair -> {
+				var n1 = pair.fst();
+				var n2 = pair.snd();
+				return contextsForNode
+					.get(n1)
+					.stream()
+					.flatMap(c1 -> {
+						var v1 = Pair.of(n1, c1);
+						return contextsForNode
+							.get(n2)
+							.stream()
+							.map(c2 -> Pair.of(v1, Pair.of(n2, c2)));
+					});
+			}).collect(Collectors.toSet());
 	}
 }
