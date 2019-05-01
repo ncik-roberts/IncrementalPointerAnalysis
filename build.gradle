@@ -1,8 +1,15 @@
 apply plugin: 'java'
 apply plugin: 'eclipse'
+apply plugin: 'application'
+
+mainClassName = 'edu.cmu.cs.cs15745.increpta.benchmarking.Main'
 
 repositories {
   mavenCentral()
+}
+
+startScripts {
+ classpath += files('resources')
 }
 
 dependencies {
@@ -14,4 +21,5 @@ dependencies {
   compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.js.rhino', version: '1.5.0'
   compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.java', version: '1.5.0'
   compile group: 'com.ibm.wala', name: 'com.ibm.wala.cast.java.ecj', version: '1.5.0'
+  compile files("src/dist/data")
 }

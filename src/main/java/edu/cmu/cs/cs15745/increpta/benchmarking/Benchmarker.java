@@ -9,21 +9,22 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import com.ibm.wala.classLoader.Language;
-import com.ibm.wala.core.tests.callGraph.CallGraphTestUtil;
 import com.ibm.wala.ipa.callgraph.AnalysisCacheImpl;
+import com.ibm.wala.ipa.callgraph.AnalysisOptions;
 import com.ibm.wala.ipa.callgraph.AnalysisScope;
 import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ipa.callgraph.CallGraphBuilderCancelException;
 import com.ibm.wala.ipa.callgraph.Entrypoint;
 import com.ibm.wala.ipa.cha.ClassHierarchy;
 import com.ibm.wala.ipa.cha.ClassHierarchyFactory;
+import com.ibm.wala.util.config.AnalysisScopeReader;
+import com.ibm.wala.util.io.FileProvider;
 
 import edu.cmu.cs.cs15745.increpta.ContextBuilders;
 import edu.cmu.cs.cs15745.increpta.IncrementalPointsTo;
 import edu.cmu.cs.cs15745.increpta.PointsToGraph;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node;
-import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node.HeapItem;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContextBuilder;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
 import edu.cmu.cs.cs15745.increpta.ast.AstFromWala;
@@ -36,13 +37,17 @@ public final class Benchmarker {
 	private final ClassHierarchy cha;
 	
 	public Benchmarker(String scopeFile, String exclusionsFile) {
-		scope = swallow(() -> CallGraphTestUtil.makeJ2SEAnalysisScope(scopeFile, exclusionsFile));
+		scope = swallow(() ->
+			AnalysisScopeReader.readJavaScope(
+				scopeFile,
+				new FileProvider().getFile(exclusionsFile),
+				Benchmarker.class.getClassLoader()));
 		cha = swallow(() -> ClassHierarchyFactory.make(scope));
 	}
 	
 	// Build initial call graph.
 	public CallGraph makeCallGraph(Iterable<Entrypoint> entrypoints) {
-		var options = CallGraphTestUtil.makeAnalysisOptions(scope, entrypoints);
+		var options = new AnalysisOptions(scope, entrypoints);
 		var cache = new AnalysisCacheImpl();
 		var builder = Util.makeZeroCFABuilder(Language.JAVA, options, cache, cha, scope);
 		try {

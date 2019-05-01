@@ -34,20 +34,4 @@ public class MultiMap<K, V> extends AbstractMap<K, Set<V>> {
 	public Set<V> getSet(K key) {
 		return map.computeIfAbsent(key, unused -> new HashSet<>());
 	}
-	
-	
-	/**
-	 * Return the entry set, divorcing elements of the value set.
-	 * Not backed by original collection.
-	 */
-	public Set<Pair<K, V>> divorcedEntrySet() {
-		Set<Pair<K, V>> result = new HashSet<>();
-		for (var entry : entrySet()) {
-			var key = entry.getKey();
-			for (var val : entry.getValue()) {
-				result.add(Pair.of(key, val));
-			}
-		}
-		return result;
-	}
 }

@@ -3,8 +3,6 @@ package edu.cmu.cs.cs15745.increpta.benchmarking;
 import java.util.List;
 import java.util.Map;
 
-import com.ibm.wala.core.tests.demandpa.TestInfo;
-
 public final class Main {
 	
 	private final static Map<String, List<String>> ALL =
