@@ -41,7 +41,7 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
 public final class AstFromWala {
 	// field for array loads/stores
 	private static final Ast.Variable ARRAY_FIELD = new Ast.Variable("array");
-	private static final boolean DEBUG = true;
+	private static final boolean DEBUG = false;
 
 	private final Ast ast;
 

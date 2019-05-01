@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -24,7 +25,6 @@ import edu.cmu.cs.cs15745.increpta.ast.Ast.Instruction.StaticInvocation;
 import edu.cmu.cs.cs15745.increpta.util.BiMap;
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
-import edu.cmu.cs.cs15745.increpta.util.Util;
 
 /**
  * Create a simple points-to-graph from an AST with context C.
@@ -352,22 +352,38 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 		Set<Pair<Node, Node>> result = inst.accept(new Instruction.Visitor<>() {
 			@Override
 			public Set<Pair<Node, Node>> visitAssignment(Assignment a) {
-				return Set.of(Pair.of(variables.get(a.source()), variables.get(a.target())));
+				var result = new HashSet<Pair<Node, Node>>();
+				Optional.ofNullable(variables.get(a.source()))
+				  .ifPresent(n1 -> Optional.ofNullable(variables.get(a.target()))
+				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
+				return result;
 			}
 
 			@Override
 			public Set<Pair<Node, Node>> visitAllocation(Allocation a) {
-				return Set.of(Pair.of(heapItems.get(a), variables.get(a.target())));
+				var result = new HashSet<Pair<Node, Node>>();
+				Optional.ofNullable(heapItems.get(a))
+				  .ifPresent(n1 -> Optional.ofNullable(variables.get(a.target()))
+				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
+				return result;
 			}
 
 			@Override
 			public Set<Pair<Node, Node>> visitFieldWrite(FieldWrite fw) {
-				return Set.of(Pair.of(variables.get(fw.source()), varFields.get(fw.target(), fw.field())));
+				var result = new HashSet<Pair<Node, Node>>();
+				Optional.ofNullable(variables.get(fw.source()))
+				  .ifPresent(n1 -> Optional.ofNullable(varFields.get(fw.target(), fw.field()))
+				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
+				return result;
 			}
 
 			@Override
 			public Set<Pair<Node, Node>> visitFieldRead(FieldRead fr) {
-				return Set.of(Pair.of(varFields.get(fr.source(), fr.field()), variables.get(fr.target())));
+				var result = new HashSet<Pair<Node, Node>>();
+				Optional.ofNullable(varFields.get(fr.source(), fr.field()))
+				  .ifPresent(n1 -> Optional.ofNullable(variables.get(fr.target()))
+				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
+				return result;
 			}
 
 			// TODO: add functions
