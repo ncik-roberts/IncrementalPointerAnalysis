@@ -56,6 +56,11 @@ public final class Main {
 		ALL.forEach(Main::benchmark);
 	}
 	
+	@SuppressWarnings("unused")
+	private static final void benchmarkWala() {
+		benchmark(TestInfo.SCOPE_FILE, ALL.get(TestInfo.SCOPE_FILE));
+	}
+	
 	private static final void benchmark(String scopeFile, List<String> mainClasses) {
 		System.out.println("==============");
 		System.out.println("Testing " + scopeFile);

@@ -156,11 +156,18 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			var clone = graph.clone();
 			for (var node : clone.nodes()) {
 				var rep = rep(node);
-				var pts = clone.pointsTo(node);
-				pts.clear();
-				pts.addAll(clone.pointsTo(rep));
+				if (!rep.equals(node)) {
+					var pts = clone.pointsTo(node);
+					pts.clear();
+					pts.addAll(clone.pointsTo(rep));
+				}
 			}
 			return clone;
+		}
+		
+		@Override
+		public String toString() {
+			return graph.toString();
 		}
 	}
 	

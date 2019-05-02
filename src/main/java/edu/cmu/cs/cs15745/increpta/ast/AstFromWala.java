@@ -91,11 +91,10 @@ public final class AstFromWala {
 			IMethod method = node.getMethod();
 			Ast.Type type = type(method.getDeclaringClass());
 			List<Ast.Variable> params = new ArrayList<>();
-			String varPrefix = method.getSignature() + "::"; // For pretty-printing the variable names
 			for (int i = 0; i < method.getNumberOfParameters(); i++) {
-				params.add(new Ast.Variable(varPrefix + "param" + i));
+				params.add(new Ast.Variable(method.getSignature() + "::param" + i));
 			}
-			InstructionVisitor visitor = new InstructionVisitor(params, varPrefix);
+			InstructionVisitor visitor = new InstructionVisitor(params);
 
 			IR ir = node.getIR();
 			if (ir != null) {
@@ -131,15 +130,13 @@ public final class AstFromWala {
 
 		private final Map<Integer, Ast.Variable> variables = new LinkedHashMap<>();
 		private Ast.Variable variable(int value) {
-			return variables.computeIfAbsent(value, i -> new Ast.Variable(varPrefix + i));
+			return variables.computeIfAbsent(value, i -> new Ast.Variable(Integer.toString(i)));
 		}
 		private Optional<Ast.Variable> optionalDefVariable(SSAInstruction instruction) {
 			return instruction.hasDef() ? Optional.of(variable(instruction.getDef())) : Optional.empty();
 		}
-		private final String varPrefix;
 
-		InstructionVisitor(List<Ast.Variable> params, String varPrefix) {
-			this.varPrefix = varPrefix;
+		InstructionVisitor(List<Ast.Variable> params) {
 			// Parameters numbered from 1 in Java bytecode
 			for (int i = 0; i < params.size(); i++) {
 				variables.put(i + 1, params.get(i));

@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.Set;
 
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
+import edu.cmu.cs.cs15745.increpta.util.Util;
 
 /**
  * Points-to-graph that also maintains points-to information at each node.
@@ -122,5 +123,10 @@ public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, 
 	 */
 	public SimplePointsToGraph<Node, HeapItem> clone() {
 		return new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new LinkedHashSet<>(nodes));
+	}
+	
+	@Override
+	public String toString() {
+		return String.format("Graph:\n\t%s\n\nPoints-to:\n\t%s", Util.join("\n\t", graph.entrySet()), Util.join("\n\t", pointsTo.entrySet()));
 	}
 }

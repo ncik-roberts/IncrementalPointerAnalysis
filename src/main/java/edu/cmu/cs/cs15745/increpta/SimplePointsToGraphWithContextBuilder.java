@@ -121,34 +121,19 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 
 		private final MultiMap<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> roots = new MultiMap<>();
 
-		// Added this round.
-		private final Set<Pair<Node, C>> added = new LinkedHashSet<>();
-
 		// Add the node to the added set if it was added this round.
 		Pair<Node, C> lookup(Ast.Variable var) {
-			boolean addedThisRound = !variables.containsKey(var) || !contextsForNode.containsKey(variables.get(var));
-			Pair<Node, C> result = var(var, context);
-			if (addedThisRound) {
-				added.add(result);
-			}
-			return result;
+			return var(var, context);
 		}
 
 		// Add the node to the added set if it was added this round.
 		Pair<Node, C> lookup(Ast.Variable var, Ast.Variable field) {
-			boolean addedThisRound = varFields.get(var, field) == null || !contextsForNode.containsKey(varFields.get(var, field));
-			Pair<Node, C> result = varFields(var, field, context);
-			if (addedThisRound) {
-				added.add(result);
-			}
-			return result;
+			return varFields(var, field, context);
 		}
 		
 		void addEdge(Pair<Node, C> from, Pair<Node, C> to) {
 			result.addEdge(from, to);
-			if (!added.contains(from) && added.contains(to)) {
-				roots.getSet(to).addAll(result.pointsTo(from)); // To propagate
-			}
+			roots.getSet(to).addAll(result.pointsTo(from)); // To propagate
 		}
 		
 		// Calculate roots can only be run once.
@@ -209,7 +194,8 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 				var f = optF.get();
 				var params = f.params();
 				var args = s.arguments();
-				for (int i = 0; i < params.size(); i++) {
+				int n = Math.min(args.size(), params.size());
+				for (int i = 0; i < n; i++) {
 					addEdge(lookup(args.get(i)), lookup(params.get(i)));
 				}
 				
