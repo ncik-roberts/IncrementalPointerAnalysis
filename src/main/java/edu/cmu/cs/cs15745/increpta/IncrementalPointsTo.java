@@ -187,7 +187,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		delta.removeAll(graph.pointsTo(y));
 		if (!delta.isEmpty()) {
 			affected.add(y);
-			graph.pointsTo(y).retainAll(delta);
+			graph.pointsTo(y).addAll(delta);
 			for (var wSCC : edgesForSCC.get(sccs.get(y))) {
 				var w = wSCC.rep;
 				// We really do gotta make a copy here.
@@ -213,6 +213,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		} else {
 			// Add new edge
 			edgesForSCC.getSet(sccFrom).add(sccTo);
+			reverseEdgesForSCC.getSet(sccTo).add(sccFrom);
 			
 			// DFS from To to see if we can get to From.
 			var path = path(sccTo, sccFrom, new LinkedHashSet<>());

@@ -52,8 +52,8 @@ public class TestSCCs {
 			otherReverse.put(entry.getKey().rep, entry.getValue().stream().map(scc -> scc.rep).collect(Collectors.toSet()));
 		}
 		
-		Assert.assertEquals(withReps, other);
-		Assert.assertEquals(senseReversal, otherReverse);
+		Assert.assertEquals("not reversed", withReps, other);
+		Assert.assertEquals("reversed", senseReversal, otherReverse);
 		Assert.assertEquals(withReps.size(), map.size());
 	}
 	
