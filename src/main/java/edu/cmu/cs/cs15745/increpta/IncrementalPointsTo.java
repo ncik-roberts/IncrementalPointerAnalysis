@@ -219,9 +219,11 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			if (path != null) {
 				// Then we should merge the SCCs.
 				var superSCC = sccTo; // Merge into "to"
+				var pts = graph.pointsTo(superSCC.rep);
 				for (var scc : path) {
 					superSCC.elems.addAll(scc.elems);
 					scc.elems.forEach(e -> sccs.replace(e, superSCC));
+					pts.addAll(graph.pointsTo(scc.rep));
 					
 					// Update edges and reverse edges for scc
 					// (scc, a)
@@ -351,7 +353,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		// Consider successors of v
 		List<SCC> result = new ArrayList<>();
 		for (var wVtx : v.edgesTo) {
-			var w = V.get(wVtx);
+			var w = Objects.requireNonNull(V.get(wVtx), wVtx.toString());
 			if (w.index < 0) {
 				// Successor w has not yet been visited; recurse on it
 				result.addAll(strongconnect(S, index, V, w));

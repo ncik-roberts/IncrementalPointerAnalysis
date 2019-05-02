@@ -24,11 +24,11 @@ public class TestSCCs {
 		A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z;
 	}
 	
-	private static <N, H> IncrementalPointsTo<N, H> of(Set<N> nodes, Map<N, Set<N>> graph, Map<N, Set<H>> pointsTo) {
+	static <N, H> IncrementalPointsTo<N, H> of(Set<N> nodes, Map<N, Set<N>> graph, Map<N, Set<H>> pointsTo) {
 		return new IncrementalPointsTo<>(new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new LinkedHashSet<>(nodes)));
 	}
 	
-	private static void check(IncrementalPointsTo<Node, ?> builder, Map<Node, Set<Node>> map) {
+	static void check(IncrementalPointsTo<Node, ?> builder, Map<Node, Set<Node>> map) {
 		var withReps = new HashMap<Node, Set<Node>>();
 		for (var entry : map.entrySet()) {
 			var rep = builder.rep(entry.getKey());
