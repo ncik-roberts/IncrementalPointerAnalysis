@@ -222,6 +222,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 						edgesA.remove(scc);
 						if (!a.equals(superSCC)) {
 							edgesA.add(superSCC);
+							edgesForSCC.getSet(superSCC).add(a);
 						}
 					}
 
@@ -231,6 +232,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 						edgesA.remove(scc);
 						if (!a.equals(superSCC)) {
 							edgesA.add(superSCC);
+							reverseEdgesForSCC.getSet(superSCC).add(a);
 						}
 					}
 				}
@@ -318,13 +320,14 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		int[] index = { 0 };
 		List<SCC> out = new ArrayList<>();
 		Map<Node, TarjanVertex> V = new LinkedHashMap<>();
-		for (var v : vs) {
+		for (var v : graph.nodes()) {
 			var edges = graph.edges(v);
 			V.put(v, new TarjanVertex(v, edges));
 		}
-		for (var v : V.values()) {
-			if (v.index < 0) { // if v.index is undefined,
-				out.addAll(strongconnect(S, index, V, v));
+		for (var v : vs) {
+			var tv = V.get(v);
+			if (tv.index < 0) { // if v.index is undefined,
+				out.addAll(strongconnect(S, index, V, tv));
 			}
 		}
 		return out;

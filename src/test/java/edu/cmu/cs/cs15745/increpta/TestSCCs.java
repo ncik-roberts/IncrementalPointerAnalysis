@@ -130,4 +130,35 @@ public class TestSCCs {
 				Map.of(
 					Node.A, Set.of()));
 	}
+
+	@Test
+	public void test4() {
+		var builder = of(
+			Set.of(Node.A, Node.B, Node.C, Node.D, Node.E, Node.F, Node.G, Node.H),
+			Map.of(
+				Node.A, Set.of(Node.B),
+				Node.B, Set.of(Node.C),
+				Node.C, Set.of(Node.A, Node.D),
+				Node.D, Set.of(Node.E, Node.G),
+				Node.E, Set.of(Node.F),
+				Node.F, Set.of(Node.E),
+				Node.G, Set.of(Node.H),
+				Node.H, Set.of(Node.G)
+			),
+			Map.of());
+
+		var pag = builder.build(); // abc  ->  d (-> ef, -> gh)
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.D),
+					Node.D, Set.of(Node.E, Node.G),
+					Node.E, Set.of(),
+					Node.G, Set.of()));
+		
+		pag.addEdge(Node.F, Node.B);
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.G),
+					Node.G, Set.of()));
+	}
 }
