@@ -76,9 +76,9 @@ public class TestInfo {
 
   public static final String TEST_METHOD_RECURSION = "Ldemandpa/TestMethodRecursion";
 
-  public static final String TEST_HASH_SET = "Ldemandpa/TestLinkedHashSet";
+  public static final String TEST_HASH_SET = "Ldemandpa/TestHashSet";
 
-  public static final String TEST_LinkedHashMap_GET = "Ldemandpa/TestLinkedHashMapGet";
+  public static final String TEST_HASH_MAP_GET = "Ldemandpa/TestHashMapGet";
 
   public static final String TEST_LINKED_LIST = "Ldemandpa/TestLinkedList";
 

@@ -26,7 +26,7 @@ public final class Main {
 				TestInfo.TEST_COND,
 				TestInfo.TEST_METHOD_RECURSION,
 				TestInfo.TEST_HASH_SET,
-				TestInfo.TEST_LinkedHashMap_GET,
+				TestInfo.TEST_HASH_MAP_GET,
 				TestInfo.TEST_LINKED_LIST,
 				TestInfo.TEST_LINKEDLIST_ITER,
 				TestInfo.TEST_ARRAY_LIST,
@@ -49,8 +49,8 @@ public final class Main {
 		
 	
 	public static void main(String[] args) {
-		// benchmarkWala();
-		benchmarkAll();
+		benchmarkWala();
+		// benchmarkAll();
 	}
 	
 	private static final void benchmarkAll() {
