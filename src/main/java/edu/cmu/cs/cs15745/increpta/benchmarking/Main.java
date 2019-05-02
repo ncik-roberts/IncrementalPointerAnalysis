@@ -39,7 +39,7 @@ public final class Main {
 				TestInfo.FLOWSTO_TEST_FIELDS,
 				TestInfo.FLOWSTO_TEST_FIELDS_HARDER,
 				TestInfo.FLOWSTO_TEST_ARRAYSET_ITER,
-				TestInfo.FLOWSTO_TEST_LinkedHashSet),
+				TestInfo.FLOWSTO_TEST_HASH_SET),
 			"wala.testdata_sunflow.txt", List.of("Lorg/sunflow/Benchmark"),
 			"wala.testdata_eclipse.txt", List.of("Lorg/eclipse/core/runtime/adaptor/EclipseStarter"),
 			"wala.testdata_jython.txt",  List.of("Lorg/python/util/jython"),

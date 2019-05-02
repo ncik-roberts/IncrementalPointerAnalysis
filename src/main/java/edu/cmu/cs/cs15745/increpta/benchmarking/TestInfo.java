@@ -104,5 +104,5 @@ public class TestInfo {
 
   public static final String FLOWSTO_TEST_ARRAYSET_ITER = "Ldemandpa/FlowsToTestArraySetIter";
 
-  public static final String FLOWSTO_TEST_LinkedHashSet = "Ldemandpa/FlowsToTestLinkedHashSet";
+  public static final String FLOWSTO_TEST_HASH_SET = "Ldemandpa/FlowsToTestHashSet";
 }
