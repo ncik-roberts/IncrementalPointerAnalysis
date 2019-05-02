@@ -30,18 +30,30 @@ public class TestSCCs {
 	
 	static void check(IncrementalPointsTo<Node, ?> builder, Map<Node, Set<Node>> map) {
 		var withReps = new HashMap<Node, Set<Node>>();
+		var senseReversal = new MultiMap<Node, Node>();
 		for (var entry : map.entrySet()) {
 			var rep = builder.rep(entry.getKey());
 			var set = entry.getValue().stream().map(builder::rep).collect(Collectors.toSet());
 			withReps.put(rep, set);
+			
+			senseReversal.getSet(rep);
+			for (var e : set) {
+				senseReversal.getSet(e).add(rep);
+			}
 		}
 		
 		var other = new HashMap<Node, Set<Node>>();
 		for (var entry : builder.edgesForSCC().entrySet()) {
 			other.put(entry.getKey().rep, entry.getValue().stream().map(scc -> scc.rep).collect(Collectors.toSet()));
 		}
+
+		var otherReverse = new HashMap<Node, Set<Node>>();
+		for (var entry : builder.reverseEdgesForSCC().entrySet()) {
+			otherReverse.put(entry.getKey().rep, entry.getValue().stream().map(scc -> scc.rep).collect(Collectors.toSet()));
+		}
 		
 		Assert.assertEquals(withReps, other);
+		Assert.assertEquals(senseReversal, otherReverse);
 		Assert.assertEquals(withReps.size(), map.size());
 	}
 	

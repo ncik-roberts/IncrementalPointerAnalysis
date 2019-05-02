@@ -49,17 +49,11 @@ public final class Main {
 		
 	
 	public static void main(String[] args) {
-		benchmarkWala();
-		// benchmarkAll();
+		benchmarkAll();
 	}
 	
 	private static final void benchmarkAll() {
 		ALL.forEach(Main::benchmark);
-	}
-	
-	@SuppressWarnings("unused")
-	private static final void benchmarkWala() {
-		benchmark(TestInfo.SCOPE_FILE, ALL.get(TestInfo.SCOPE_FILE));
 	}
 	
 	private static final void benchmark(String scopeFile, List<String> mainClasses) {

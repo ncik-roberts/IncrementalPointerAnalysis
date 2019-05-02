@@ -256,6 +256,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		SCC sccTo = Objects.requireNonNull(sccs.get(to));
 		if (!sccFrom.equals(sccTo)) { // Different SCC, deletion does nothing.
 			edgesForSCC.getSet(sccFrom).remove(sccTo);
+			reverseEdgesForSCC.getSet(sccTo).remove(sccFrom);
 			return;
 		} else {
 			SCC scc = sccTo; // or sccFrom, they're the same
@@ -294,6 +295,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	private void calculateEdgesForSCCs(Iterable<SCC> newSCCs) {
 		for (var scc : newSCCs) {
 			var toAddTo = edgesForSCC.getSet(scc);
+			reverseEdgesForSCC.getSet(scc); // add empty set
 			for (var node : scc.elems) { 
 				for (var to : graph.edges(node)) {
 					// Only add edges that go outside of scc
@@ -412,5 +414,10 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	/** For testing only */
 	MultiMap<SCC, SCC> edgesForSCC() {
 		return edgesForSCC;
+	}
+
+	/** For testing only */
+	MultiMap<SCC, SCC> reverseEdgesForSCC() {
+		return reverseEdgesForSCC;
 	}
 }
