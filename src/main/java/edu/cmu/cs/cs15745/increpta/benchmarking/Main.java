@@ -49,7 +49,7 @@ public final class Main {
 		
 	
 	public static void main(String[] args) {
-		benchmarkAll();
+		benchmarkWala();
 	}
 	
 	private static final void benchmarkAll() {

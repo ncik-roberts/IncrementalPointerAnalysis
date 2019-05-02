@@ -88,6 +88,7 @@ public final class Benchmarker {
 
 		var simplePag = builder.build(); // This graph does not find SCCs / does not incrementally update points-to sets.
 		var pag = new IncrementalPointsTo<>(simplePag).build(); // This graph finds SCCs / incrementally updates points-to sets.
+		System.out.println("There are " + pag.nodes().size() + " nodes with " + pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum() + " pointed to.");
 
 		long pointPAG = System.currentTimeMillis();
 		long timePAG = pointPAG - pointAST;
