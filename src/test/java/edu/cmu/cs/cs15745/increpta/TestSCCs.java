@@ -155,10 +155,49 @@ public class TestSCCs {
 					Node.E, Set.of(),
 					Node.G, Set.of()));
 		
+		// add an edge to collapse sccs
 		pag.addEdge(Node.F, Node.B);
 		check(builder,
 				Map.of(
 					Node.A, Set.of(Node.G),
+					Node.G, Set.of()));
+
+		// make sure it's invertible
+		pag.deleteEdge(Node.F, Node.B);
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.D),
+					Node.D, Set.of(Node.E, Node.G),
+					Node.E, Set.of(),
+					Node.G, Set.of()));
+
+		// add back the edge
+		pag.addEdge(Node.F, Node.B);
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.G),
+					Node.G, Set.of()));
+
+		// add another edge to make one scc
+		pag.addEdge(Node.H, Node.C);
+		check(builder,
+				Map.of(
+					Node.A, Set.of()));
+
+		// delete back out the other of the two added edges
+		pag.deleteEdge(Node.F, Node.B);
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.F),
+					Node.F, Set.of()));
+
+		// round trip
+		pag.deleteEdge(Node.H, Node.C);
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.D),
+					Node.D, Set.of(Node.E, Node.G),
+					Node.E, Set.of(),
 					Node.G, Set.of()));
 	}
 }

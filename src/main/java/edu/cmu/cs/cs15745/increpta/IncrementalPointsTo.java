@@ -57,6 +57,14 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			this.elems = elems;
 		}
 		@Override
+		public boolean equals(Object o) {
+			return o instanceof IncrementalPointsTo<?, ?>.SCC && Objects.equals(rep, ((IncrementalPointsTo<?, ?>.SCC) o).rep);
+		}
+		@Override
+		public int hashCode() {
+			return rep.hashCode();
+		}
+		@Override
 		public String toString() {
 			return rep.toString();
 		}
@@ -254,14 +262,6 @@ public class IncrementalPointsTo<Node, HeapItem> {
 				// We're good, no need to update anything.
 				return;
 			} else { // Otherwise, we broke into multiple sccs.
-				for (SCC newScc : afterDelete) {
-					for (var elem : newScc.elems) {
-						// Create "updated" as well so we can calculate edges for only the right sccs
-						sccs.put(elem, newScc);
-					}
-				}
-				calculateEdgesForSCCs(afterDelete);
-
 				// Now we just need to: update stale references in edgesForSCCs and reverseEdgesForSCCs
 				// For each edge (scc, A) removed from edges, remove (A, scc) from reverseEdges.
 				for (var toRemove : edgesForSCC.removeSet(scc)) {
@@ -274,6 +274,14 @@ public class IncrementalPointsTo<Node, HeapItem> {
 					edgesForSCC.getSet(a).remove(scc);
 				}
 				
+				for (SCC newScc : afterDelete) {
+					for (var elem : newScc.elems) {
+						// Create "updated" as well so we can calculate edges for only the right sccs
+						sccs.put(elem, newScc);
+					}
+				}
+				calculateEdgesForSCCs(afterDelete);
+
 				// Recalculate edges for each node A, in case they go to the newly-created SCCs
 				calculateEdgesForSCCs(as);
 			}
