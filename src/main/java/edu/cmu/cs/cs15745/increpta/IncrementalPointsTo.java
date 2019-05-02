@@ -220,14 +220,18 @@ public class IncrementalPointsTo<Node, HeapItem> {
 					for (var a : edgesForSCC.remove(scc)) {
 						var edgesA = reverseEdgesForSCC.getSet(a);
 						edgesA.remove(scc);
-						edgesA.add(superSCC);
+						if (!a.equals(superSCC)) {
+							edgesA.add(superSCC);
+						}
 					}
 
 					// (a, scc)
 					for (var a : reverseEdgesForSCC.remove(scc)) {
 						var edgesA = edgesForSCC.getSet(a);
 						edgesA.remove(scc);
-						edgesA.add(superSCC);
+						if (!a.equals(superSCC)) {
+							edgesA.add(superSCC);
+						}
 					}
 				}
 			}

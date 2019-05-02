@@ -12,6 +12,10 @@ startScripts {
  classpath += files('resources')
 }
 
+test.testLogging {
+  exceptionFormat "full"; events "failed", "passed", "skipped"
+}
+
 dependencies {
   compile group: 'com.ibm.wala', name: 'com.ibm.wala.shrike', version: '1.5.0'
   compile group: 'com.ibm.wala', name: 'com.ibm.wala.util', version: '1.5.0'

@@ -28,10 +28,6 @@ public class TestSCCs {
 		return new IncrementalPointsTo<>(new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new LinkedHashSet<>(nodes)));
 	}
 	
-	private int numSCCs(IncrementalPointsTo<?, ?> builder) {
-		return builder.edgesForSCC().size();
-	}
-	
 	private static void check(IncrementalPointsTo<Node, ?> builder, Map<Node, Set<Node>> map) {
 		var withReps = new HashMap<Node, Set<Node>>();
 		for (var entry : map.entrySet()) {
@@ -46,6 +42,7 @@ public class TestSCCs {
 		}
 		
 		Assert.assertEquals(withReps, other);
+		Assert.assertEquals(withReps.size(), map.size());
 	}
 	
 	@Test
@@ -60,17 +57,14 @@ public class TestSCCs {
 
 		var pag = builder.build(); // a -> b -> c -> a
 		check(builder, Map.of(Node.A, Set.of()));
-		Assert.assertEquals(1, numSCCs(builder));
 
 		pag.addEdge(Node.A, Node.B); // a -> b -> c -> a
 		check(builder, Map.of(Node.A, Set.of()));
-		Assert.assertEquals(1, numSCCs(builder));
 
 		pag.deleteEdge(Node.C, Node.A); // a -> b -> c
 		check(builder, Map.of(Node.A, Set.of(Node.B),
 				              Node.B, Set.of(Node.C),
 				              Node.C, Set.of()));
-		Assert.assertEquals(3, numSCCs(builder));
 	}
 
 	@Test
@@ -83,17 +77,23 @@ public class TestSCCs {
 			Map.of());
 
 		var pag = builder.build(); // a -> b -> c
-
-		Assert.assertEquals(3, numSCCs(builder));
 		check(builder,
 				Map.of(
 					Node.A, Set.of(Node.B),
 					Node.B, Set.of(Node.C),
 					Node.C, Set.of()));
+
 		pag.addEdge(Node.A, Node.B); // a -> b -> c
-		Assert.assertEquals(3, numSCCs(builder));
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.B),
+					Node.B, Set.of(Node.C),
+					Node.C, Set.of()));
+
 		pag.addEdge(Node.C, Node.A); // a -> b -> c -> a
-		Assert.assertEquals(1, numSCCs(builder));
+		check(builder,
+				Map.of(
+					Node.A, Set.of()));
 	}
 
 	@Test
@@ -106,13 +106,28 @@ public class TestSCCs {
 			Map.of());
 
 		var pag = builder.build(); // a -> b -> c
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.B),
+					Node.B, Set.of(Node.C),
+					Node.C, Set.of()));
 
-		Assert.assertEquals(3, numSCCs(builder));
 		pag.addEdge(Node.A, Node.B); // a -> b -> c
-		Assert.assertEquals(3, numSCCs(builder));
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.B),
+					Node.B, Set.of(Node.C),
+					Node.C, Set.of()));
+
 		pag.addEdge(Node.C, Node.B); // a -> b <-> c
-		Assert.assertEquals(2, numSCCs(builder));
+		check(builder,
+				Map.of(
+					Node.A, Set.of(Node.B),
+					Node.B, Set.of()));
+
 		pag.addEdge(Node.C, Node.A); // a -> b <-> c -> a
-		Assert.assertEquals(1, numSCCs(builder));
+		check(builder,
+				Map.of(
+					Node.A, Set.of()));
 	}
 }
