@@ -25,7 +25,7 @@ import edu.cmu.cs.cs15745.increpta.IncrementalPointsTo;
 import edu.cmu.cs.cs15745.increpta.PointsToGraph;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node;
-import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContextBuilder;
+import edu.cmu.cs.cs15745.increpta.PointsToGraphWithContextBuilder;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
 import edu.cmu.cs.cs15745.increpta.ast.AstFromWala;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
@@ -81,13 +81,13 @@ public final class Benchmarker {
 		System.out.println(String.format("\tAST conversion: %.3fs", timeAST / 1000D));
 
 		// Starting building pointsToGraph
-		var builder = new SimplePointsToGraphWithContextBuilder<>(
+		var builder = new PointsToGraphWithContextBuilder<>(
 				ast,
 				new SimplePointsToGraphWithContext<>(),
 				ContextBuilders.NO_CONTEXT);
 
-		var simplePag = builder.build(); // This graph does not find SCCs / does not incrementally update points-to sets.
-		var pag = new IncrementalPointsTo<>(simplePag).build(); // This graph finds SCCs / incrementally updates points-to sets.
+		var pag = builder.build();
+		System.out.println("There are " + pag.nodes().size() + " nodes with " + pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum() + " pointed to.");
 
 		long pointPAG = System.currentTimeMillis();
 		long timePAG = pointPAG - pointAST;
@@ -120,7 +120,7 @@ public final class Benchmarker {
 			Ast.FunctionBody body,
 			PointsToGraph<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> pag, // Run incremental add / delete
 			PointsToGraph<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> pagCopy, // Check correctness
-			SimplePointsToGraphWithContextBuilder<C> builder, // Convert ast instruction to graph nodes
+			PointsToGraphWithContextBuilder<C> builder, // Convert ast instruction to graph nodes
 			TestState state) {
 		for (var inst : body.instructions()) {
 			if (inst == null) {

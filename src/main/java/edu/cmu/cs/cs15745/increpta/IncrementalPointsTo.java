@@ -3,6 +3,7 @@ package edu.cmu.cs.cs15745.increpta;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -70,8 +71,17 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		}
 	}
 	
+	SCC scc(Node node) {
+		return sccs.computeIfAbsent(node, unused -> {
+			var scc = new SCC(node, new HashSet<>(List.of(node)));
+			edgesForSCC.getSet(scc);
+			reverseEdgesForSCC.getSet(scc);
+			return scc;
+		});
+	}
+	
 	Node rep(Node node) {
-		return sccs.get(node).rep;
+		return scc(node).rep;
 	}
 	
 	/**
@@ -85,7 +95,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		@Override
 		public Set<Node> addEdge(Node from, Node to) {
 			// If we already have this edge, don't do anything.
-			if (edgesForSCC.getSet(sccs.get(from)).contains(sccs.get(to))) {
+			if (edgesForSCC.getSet(scc(from)).contains(scc(to))) {
 				return Set.of();
 			}
 
@@ -172,7 +182,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	}
 	
 	private void propagateDeleteChange(Set<HeapItem> delta, Node y, Set<Node> affected) {
-		for (var zSCC : reverseEdgesForSCC.getSet(sccs.get(y))) {
+		for (var zSCC : reverseEdgesForSCC.getSet(scc(y))) {
 			var z = zSCC.rep;
 			delta.removeAll(graph.pointsTo(z));
 			if (delta.isEmpty()) {
@@ -181,7 +191,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		}
 		affected.add(y);
 		graph.pointsTo(y).removeAll(delta);
-		for (var wSCC : edgesForSCC.getSet(sccs.get(y))) {
+		for (var wSCC : edgesForSCC.getSet(scc(y))) {
 			var w = wSCC.rep;
 			propagateDeleteChange(new LinkedHashSet<>(delta), w, affected);
 		}
@@ -195,7 +205,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		if (!delta.isEmpty()) {
 			affected.add(y);
 			graph.pointsTo(y).addAll(delta);
-			for (var wSCC : edgesForSCC.get(sccs.get(y))) {
+			for (var wSCC : edgesForSCC.get(scc(y))) {
 				var w = wSCC.rep;
 				// We really do gotta make a copy here.
 				propagateAddChange(new LinkedHashSet<>(delta), w, worklist, affected);
@@ -211,8 +221,8 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	
 	/** Incrementally update SCC based on add of edge. */
 	void updateSCCsAdd(Node from, Node to) {
-		SCC sccFrom = Objects.requireNonNull(sccs.get(from));
-		SCC sccTo = Objects.requireNonNull(sccs.get(to));
+		SCC sccFrom = Objects.requireNonNull(scc(from));
+		SCC sccTo = Objects.requireNonNull(scc(to));
 		if (sccFrom.equals(sccTo)) { // Same instance?
 			return; // We don't need to update anything
 		} else if (edgesForSCC.getSet(sccFrom).contains(sccTo)){ // If we're already pointing to,
@@ -260,8 +270,8 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	
 	/** Incrementally update SCC based on delete of edge. */
 	void updateSCCsDelete(Node from, Node to) {
-		SCC sccFrom = Objects.requireNonNull(sccs.get(from));
-		SCC sccTo = Objects.requireNonNull(sccs.get(to));
+		SCC sccFrom = Objects.requireNonNull(scc(from));
+		SCC sccTo = Objects.requireNonNull(scc(to));
 		if (!sccFrom.equals(sccTo)) { // Different SCC, deletion does nothing.
 			edgesForSCC.getSet(sccFrom).remove(sccTo);
 			reverseEdgesForSCC.getSet(sccTo).remove(sccFrom);
@@ -308,7 +318,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 				for (var to : graph.edges(node)) {
 					// Only add edges that go outside of scc
 					if (!scc.elems.contains(to)) {
-						var rep = sccs.get(to);
+						var rep = scc(to);
 						toAddTo.add(rep);
 						reverseEdgesForSCC.getSet(rep).add(scc);
 					}
