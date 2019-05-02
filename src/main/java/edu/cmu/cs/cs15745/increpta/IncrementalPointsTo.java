@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
+import edu.cmu.cs.cs15745.increpta.util.Pair;
 
 /**
  * Class for building and incrementally updating SCCs.
@@ -58,15 +59,68 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		}
 	}
 	
+	private Node rep(Node node) {
+		return sccs.get(node).rep;
+	}
+	
 	/**
 	 * Points-to-graph supporting incremental add and delete
 	 */
 	public class Graph implements PointsToGraph<Node, HeapItem> {
 
+		/**
+		 * Incrementally add edge.
+		 */
 		@Override
-		public boolean addEdge(Node from, Node to) {
+		public Set<Node> addEdge(Node from, Node to) {
+			// If we already have this edge, don't do anything.
+			if (edgesForSCC.getSet(sccs.get(from)).contains(sccs.get(to))) {
+				return Set.of();
+			}
+
+			var affectedNodes = new HashSet<Node>();
+			var worklist = new ArrayDeque<Pair<Node, Node>>();
+			worklist.add(Pair.of(from, to));
+			
+			while (worklist.isEmpty()) {
+				var edge = worklist.remove();
+				var x = edge.fst();
+				var y = edge.snd();
+				updateSCCsAdd(x, y);
+				graph.addEdge(x, y);
+				
+				// Be careful to call pointsTo (and not graph.pointsTo) to
+				// ensure we are grabbing the pts for the representative for the scc
+				// (which is where we are maintaining all updates).
+				// We also must make a copy since "propagateAddchange" destructively
+				// modifies this set.
+				var delta = new HashSet<>(pointsTo(x));
+				propagateAddChange(delta, rep(y), worklist, affectedNodes);
+			}
+			
+			// We added (some) new edge
+			return affectedNodes;
+		}
+		
+		/**
+		 * Incrementally delete edge.
+		 */
+		@Override
+		public Set<Node> deleteEdge(Node from, Node to) {
+			// The structure of this is very similar to addEdge;
+			// but we don't need a worklist because:
+			//   (1) each method node will be re-deleted one at a time (by client calls to deleteEdge),
+			//   (2) we handle fields differently than the B. Liu et al. paper.
+			var affectedNodes = new HashSet<Node>();
+			
 			updateSCCsAdd(from, to);
-			return graph.addEdge(from, to);
+			graph.deleteEdge(from, to);
+			
+			var delta = new HashSet<>(pointsTo(from));
+			propagateDeleteChange(delta, rep(to), affectedNodes);
+			
+			// We added (some) new edge
+			return affectedNodes;
 		}
 
 		@Override
@@ -76,22 +130,63 @@ public class IncrementalPointsTo<Node, HeapItem> {
 
 		@Override
 		public Set<Node> edges(Node node) {
-			Set<Node> result = new HashSet<>();
-			var edges = edgesForSCC.getSet(sccs.get(node));
-			for (var e : edges) {
-				result.add(e.rep);
-			}
-			return result;
+			return graph.edges(node);
 		}
 
 		@Override
 		public Set<HeapItem> pointsTo(Node key) {
-			return graph.pointsTo(key);
+			// We only update for the rep anymore, anyway.
+			return graph.pointsTo(rep(key));
 		}
 		
 		@Override
 		public PointsToGraph<Node, HeapItem> clone() {
-			return graph.clone();
+			var clone = graph.clone();
+			for (var node : clone.nodes()) {
+				var rep = rep(node);
+				var pts = clone.pointsTo(node);
+				pts.clear();
+				pts.addAll(clone.pointsTo(rep));
+			}
+			return clone;
+		}
+	}
+	
+	private void propagateDeleteChange(Set<HeapItem> delta, Node y, Set<Node> affected) {
+		for (var zSCC : reverseEdgesForSCC.getSet(sccs.get(y))) {
+			var z = zSCC.rep;
+			delta.removeAll(graph.pointsTo(z));
+			if (delta.isEmpty()) {
+				return;
+			}
+		}
+		affected.add(y);
+		graph.pointsTo(y).removeAll(delta);
+		for (var wSCC : edgesForSCC.getSet(sccs.get(y))) {
+			var w = wSCC.rep;
+			propagateDeleteChange(new HashSet<>(delta), w, affected);
+		}
+	}
+	
+	// See "Rethinking Incremental and Parallel Pointer Analysis", p. 6.13, for var names
+	/** Incrementally update change. */
+	private void propagateAddChange(Set<HeapItem> delta, Node y, Deque<Pair<Node, Node>> worklist, Set<Node> affected) {
+		// Invariant: y is a rep.
+		delta.removeAll(graph.pointsTo(y));
+		if (!delta.isEmpty()) {
+			affected.add(y);
+			graph.pointsTo(y).retainAll(delta);
+			for (var wSCC : edgesForSCC.get(sccs.get(y))) {
+				var w = wSCC.rep;
+				// We really do gotta make a copy here.
+				propagateAddChange(new HashSet<>(delta), w, worklist, affected);
+			}
+
+			// Complex added statements
+			// We don't need to separately handle field-loads and -writes, because
+			// we only store one copy of each field.
+			
+			// TODO: Add method call processing.
 		}
 	}
 	

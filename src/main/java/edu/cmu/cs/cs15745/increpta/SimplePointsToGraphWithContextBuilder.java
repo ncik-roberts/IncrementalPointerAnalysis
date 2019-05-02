@@ -260,7 +260,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			// Connect two nodes.
 			// Also propagate points-to set through dfs.
 			private void connect(Pair<Node, C> from, Pair<Node, C> to) {
-				if (result.addEdge(from, to)) { // This short-circuiting prevents infinite recursion
+				if (!result.addEdge(from, to).isEmpty()) { // This short-circuiting prevents infinite recursion
 					var pointsTo = result.pointsTo(from);
 					for (var dfs = result.dfs(to); dfs.hasNext(); ) {
 						var node = dfs.next();

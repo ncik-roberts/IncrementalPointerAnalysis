@@ -33,6 +33,7 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
 /** Run some benchmarks. */
 public final class Benchmarker {
 
+	private static final boolean DEBUG = System.getenv("IPA_DEBUG") != null;
 	private final AnalysisScope scope;
 	private final ClassHierarchy cha;
 	
@@ -132,18 +133,18 @@ public final class Benchmarker {
 			Set<Pair<Node, C>> affectedNodes = new HashSet<>();
 
 			/******** DELETION CITY ********/
-			System.out.println("Deleting SSA Instruction: " + inst);
+			if (DEBUG) System.out.println("Deleting SSA Instruction: " + inst);
 			long deletePointMS = System.currentTimeMillis();
 			for (var edge : edges) {
-				// affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
+				affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
 			}
 			long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
 
 			/******** ADDITION CITY ********/
-			System.out.println("Adding SSA Instruction: " + inst);
+			if (DEBUG) System.out.println("Adding SSA Instruction: " + inst);
 			long addPointMS = System.currentTimeMillis();
 			for (var edge : edges) {
-				// affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
+				affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
 			}
 			long addTimeMS = System.currentTimeMillis() - addPointMS;
 			
@@ -160,10 +161,10 @@ public final class Benchmarker {
 				}
 			}
 
-			System.out.println("Verified correctness! :)");
+			if (DEBUG) System.out.println("Verified correctness! :)");
 
 			// We done
-			System.out.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
+			if (DEBUG) System.out.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
 			state.totalDeleteTimeMS += deleteTimeMS;
 			state.totalAddTimeMS += addTimeMS;
 		}

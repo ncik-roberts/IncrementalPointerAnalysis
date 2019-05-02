@@ -35,14 +35,26 @@ public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, 
 	}
 	
 	/**
-	 * Add directed edge from "from" to "to", returning whether the edge was
-	 * already present. Just used internally when constructing the graph.
+	 * Add directed edge from "from" to "to".
 	 */
 	@Override
-	public boolean addEdge(Node from, Node to) {
+	public Set<Node> addEdge(Node from, Node to) {
 		nodes.add(from);
 		nodes.add(to);
-		return graph.getSet(from).add(to);
+		if (graph.getSet(from).add(to)) {
+			return Set.of(to);
+		} else {
+			return Set.of();
+		}
+	}
+	
+	@Override
+	public Set<Node> deleteEdge(Node from, Node to) {
+		if (graph.getSet(from).remove(to)) {
+			return Set.of(to);
+		} else {
+			return Set.of();
+		}
 	}
 	
 	/** Returns unmodifiable set. */
