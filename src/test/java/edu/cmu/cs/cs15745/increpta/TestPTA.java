@@ -25,8 +25,7 @@ public class TestPTA {
 
 	@Test
 	public void test1() {
-		var builder = TestSCCs.of(
-			Set.of(Node.A, Node.B, Node.C, Node.D, Node.E, Node.F),
+		var p = TestSCCs.of(
 			Map.of(
 				Node.A, Set.of(Node.B),
 				Node.C, Set.of(Node.D),
@@ -34,14 +33,12 @@ public class TestPTA {
 				Node.B, Set.of(Node.D),
 				Node.D, Set.of(Node.F)),
 			Map.of(
-				Node.A, Set.of(HeapItem.A),
-				Node.C, Set.of(HeapItem.C),
-				Node.E, Set.of(HeapItem.E),
-				Node.B, Set.of(HeapItem.A),
-				Node.D, Set.of(HeapItem.A, HeapItem.C),
-				Node.F, Set.of(HeapItem.A, HeapItem.C, HeapItem.E)));
+				Node.A, HeapItem.A,
+				Node.C, HeapItem.C,
+				Node.E, HeapItem.E));
 		
-		var pag = builder.build();
+		var builder = p.fst();
+		var pag = p.snd();
 		TestSCCs.check(builder,
 			Map.of(
 				Node.A, Set.of(Node.B),
@@ -173,8 +170,7 @@ public class TestPTA {
 	@Test
 	// Based on TestFields from wala.core.testdata.demandpa
 	public void test2() {
-		var builder = TestSCCs.of(
-			Set.of(Node.A, Node.B, Node.C, Node.D, Node.E, Node.F, Node.G, Node.H, Node.I, Node.J, Node.K, Node.L),
+		var p = TestSCCs.of(
 			Map.of(
 				Node.A, Set.of(Node.E),
 				Node.B, Set.of(Node.F),
@@ -184,21 +180,14 @@ public class TestPTA {
 				Node.F, Set.of(Node.J),
 				Node.I, Set.of(Node.K),
 				Node.J, Set.of(Node.L)),
-			Map.ofEntries(
-				Map.entry(Node.A, Set.of(HeapItem.A)),
-				Map.entry(Node.B, Set.of(HeapItem.B)),
-				Map.entry(Node.C, Set.of(HeapItem.C)),
-				Map.entry(Node.D, Set.of(HeapItem.D)),
-				Map.entry(Node.E, Set.of(HeapItem.A)),
-				Map.entry(Node.F, Set.of(HeapItem.B)),
-				Map.entry(Node.G, Set.of(HeapItem.C)),
-				Map.entry(Node.H, Set.of(HeapItem.D)),
-				Map.entry(Node.I, Set.of(HeapItem.A)),
-				Map.entry(Node.J, Set.of(HeapItem.B)),
-				Map.entry(Node.K, Set.of(HeapItem.A)),
-				Map.entry(Node.L, Set.of(HeapItem.B))));
+			Map.of(
+				Node.A, HeapItem.A,
+				Node.B, HeapItem.B,
+				Node.C, HeapItem.C,
+				Node.D, HeapItem.D));
 		
-		var pag = builder.build();
+		var builder = p.fst();
+		var pag = p.snd();
 		TestSCCs.check(builder,
 			Map.ofEntries(
 				Map.entry(Node.A, Set.of(Node.E)),

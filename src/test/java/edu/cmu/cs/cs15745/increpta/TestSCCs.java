@@ -1,12 +1,13 @@
 package edu.cmu.cs.cs15745.increpta;
 
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
+import edu.cmu.cs.cs15745.increpta.util.Pair;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -24,8 +25,19 @@ public class TestSCCs {
 		A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z;
 	}
 	
-	static <N, H> IncrementalPointsTo<N, H> of(Set<N> nodes, Map<N, Set<N>> graph, Map<N, Set<H>> pointsTo) {
-		return new IncrementalPointsTo<>(new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new LinkedHashSet<>(nodes)));
+	static <N, H> Pair<IncrementalPointsTo<N, H>, IncrementalPointsTo<N, H>.Graph> of(Map<N, Set<N>> graph, Map<N, H> pointsTo) {
+		var builder = new IncrementalPointsTo<N, H>(new SimplePointsToGraph<>());
+		var pta = builder.build();
+		for (var entry : pointsTo.entrySet()) {
+			pta.pointsTo(entry.getKey()).add(entry.getValue());
+		}
+		for (var entry : graph.entrySet()) {
+			var v1 = entry.getKey();
+			for (var v2 : entry.getValue()) {
+				pta.addEdge(v1, v2);
+			}
+		}
+		return Pair.of(builder, pta);
 	}
 	
 	static void check(IncrementalPointsTo<Node, ?> builder, Map<Node, Set<Node>> map) {
@@ -59,15 +71,15 @@ public class TestSCCs {
 	
 	@Test
 	public void test1() {
-		var builder = of(
-			Set.of(Node.A, Node.B, Node.C),
+		var entry = of(
 			Map.of(
 				Node.A, Set.of(Node.B),
 				Node.B, Set.of(Node.C),
 				Node.C, Set.of(Node.A)),
 			Map.of());
 
-		var pag = builder.build(); // a -> b -> c -> a
+		var builder = entry.fst();
+		var pag = entry.snd(); // a -> b -> c -> a
 		check(builder, Map.of(Node.A, Set.of()));
 
 		pag.addEdge(Node.A, Node.B); // a -> b -> c -> a
@@ -81,14 +93,14 @@ public class TestSCCs {
 
 	@Test
 	public void test2() {
-		var builder = of(
-			Set.of(Node.A, Node.B, Node.C),
+		var entry = of(
 			Map.of(
 				Node.A, Set.of(Node.B),
 				Node.B, Set.of(Node.C)),
 			Map.of());
 
-		var pag = builder.build(); // a -> b -> c
+		var builder = entry.fst();
+		var pag = entry.snd(); // a -> b -> c
 		check(builder,
 				Map.of(
 					Node.A, Set.of(Node.B),
@@ -110,14 +122,13 @@ public class TestSCCs {
 
 	@Test
 	public void test3() {
-		var builder = of(
-			Set.of(Node.A, Node.B, Node.C),
+		var entry = of(
 			Map.of(
 				Node.A, Set.of(Node.B),
 				Node.B, Set.of(Node.C)),
 			Map.of());
-
-		var pag = builder.build(); // a -> b -> c
+		var builder = entry.fst();
+		var pag = entry.snd(); // a -> b -> c
 		check(builder,
 				Map.of(
 					Node.A, Set.of(Node.B),
@@ -145,8 +156,7 @@ public class TestSCCs {
 
 	@Test
 	public void test4() {
-		var builder = of(
-			Set.of(Node.A, Node.B, Node.C, Node.D, Node.E, Node.F, Node.G, Node.H),
+		var pair = of(
 			Map.of(
 				Node.A, Set.of(Node.B),
 				Node.B, Set.of(Node.C),
@@ -159,7 +169,8 @@ public class TestSCCs {
 			),
 			Map.of());
 
-		var pag = builder.build(); // abc  ->  d (-> ef, -> gh)
+		var builder = pair.fst();
+		var pag = pair.snd(); // abc  ->  d (-> ef, -> gh)
 		check(builder,
 				Map.of(
 					Node.A, Set.of(Node.D),

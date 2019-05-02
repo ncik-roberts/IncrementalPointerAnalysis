@@ -87,11 +87,11 @@ public final class Benchmarker {
 				ContextBuilders.NO_CONTEXT);
 
 		var pag = builder.build();
-		System.out.println("There are " + pag.nodes().size() + " nodes with " + pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum() + " pointed to.");
 
 		long pointPAG = System.currentTimeMillis();
 		long timePAG = pointPAG - pointAST;
 		System.out.println(String.format("\tPAG construction: %.3fs", timePAG / 1000D));
+		System.out.println("There are " + pag.nodes().size() + " nodes with " + pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum() + " pointed to.");
 		
 		TestState state = new TestState();
 
