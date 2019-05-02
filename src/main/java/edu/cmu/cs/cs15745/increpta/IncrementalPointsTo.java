@@ -3,12 +3,11 @@ package edu.cmu.cs.cs15745.increpta;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 import edu.cmu.cs.cs15745.increpta.util.MultiMap;
@@ -22,7 +21,7 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
 public class IncrementalPointsTo<Node, HeapItem> {
 
 	private final PointsToGraph<Node, HeapItem> graph;
-	private final Map<Node, SCC> sccs = new HashMap<>();
+	private final Map<Node, SCC> sccs = new LinkedHashMap<>();
 	private final MultiMap<SCC, SCC> edgesForSCC = new MultiMap<>();
 	private final MultiMap<SCC, SCC> reverseEdgesForSCC = new MultiMap<>();
 	public IncrementalPointsTo(PointsToGraph<Node, HeapItem> graph) {
@@ -50,16 +49,20 @@ public class IncrementalPointsTo<Node, HeapItem> {
 	}
 	
 	// Wrapper class for object identity :)
-	private class SCC {
-		private final Node rep; // equiv class representative
-		private final Set<Node> elems;
+	class SCC {
+		final Node rep; // equiv class representative
+		final Set<Node> elems;
 		private SCC(Node rep, Set<Node> elems) {
 			this.rep = rep;
 			this.elems = elems;
 		}
+		@Override
+		public String toString() {
+			return rep.toString();
+		}
 	}
 	
-	private Node rep(Node node) {
+	Node rep(Node node) {
 		return sccs.get(node).rep;
 	}
 	
@@ -78,23 +81,24 @@ public class IncrementalPointsTo<Node, HeapItem> {
 				return Set.of();
 			}
 
-			var affectedNodes = new HashSet<Node>();
+			var affectedNodes = new LinkedHashSet<Node>();
 			var worklist = new ArrayDeque<Pair<Node, Node>>();
 			worklist.add(Pair.of(from, to));
 			
-			while (worklist.isEmpty()) {
+			while (!worklist.isEmpty()) {
 				var edge = worklist.remove();
 				var x = edge.fst();
 				var y = edge.snd();
-				updateSCCsAdd(x, y);
+
 				graph.addEdge(x, y);
+				updateSCCsAdd(x, y);
 				
 				// Be careful to call pointsTo (and not graph.pointsTo) to
 				// ensure we are grabbing the pts for the representative for the scc
 				// (which is where we are maintaining all updates).
 				// We also must make a copy since "propagateAddchange" destructively
 				// modifies this set.
-				var delta = new HashSet<>(pointsTo(x));
+				var delta = new LinkedHashSet<>(pointsTo(x));
 				propagateAddChange(delta, rep(y), worklist, affectedNodes);
 			}
 			
@@ -111,12 +115,12 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			// but we don't need a worklist because:
 			//   (1) each method node will be re-deleted one at a time (by client calls to deleteEdge),
 			//   (2) we handle fields differently than the B. Liu et al. paper.
-			var affectedNodes = new HashSet<Node>();
+			var affectedNodes = new LinkedHashSet<Node>();
 			
-			updateSCCsAdd(from, to);
 			graph.deleteEdge(from, to);
+			updateSCCsDelete(from, to);
 			
-			var delta = new HashSet<>(pointsTo(from));
+			var delta = new LinkedHashSet<>(pointsTo(from));
 			propagateDeleteChange(delta, rep(to), affectedNodes);
 			
 			// We added (some) new edge
@@ -164,7 +168,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		graph.pointsTo(y).removeAll(delta);
 		for (var wSCC : edgesForSCC.getSet(sccs.get(y))) {
 			var w = wSCC.rep;
-			propagateDeleteChange(new HashSet<>(delta), w, affected);
+			propagateDeleteChange(new LinkedHashSet<>(delta), w, affected);
 		}
 	}
 	
@@ -179,7 +183,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			for (var wSCC : edgesForSCC.get(sccs.get(y))) {
 				var w = wSCC.rep;
 				// We really do gotta make a copy here.
-				propagateAddChange(new HashSet<>(delta), w, worklist, affected);
+				propagateAddChange(new LinkedHashSet<>(delta), w, worklist, affected);
 			}
 
 			// Complex added statements
@@ -203,12 +207,13 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			edgesForSCC.getSet(sccFrom).add(sccTo);
 			
 			// DFS from To to see if we can get to From.
-			var path = path(sccTo, sccFrom, new HashSet<>());
+			var path = path(sccTo, sccFrom, new LinkedHashSet<>());
 			if (path != null) {
 				// Then we should merge the SCCs.
-				var superSCC = sccs.get(from); // Merge into "from"
+				var superSCC = sccTo; // Merge into "to"
 				for (var scc : path) {
 					superSCC.elems.addAll(scc.elems);
+					scc.elems.forEach(e -> sccs.replace(e, superSCC));
 					
 					// Update edges and reverse edges for scc
 					// (scc, a)
@@ -244,7 +249,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 				return;
 			} else { // Otherwise, we broke into multiple sccs.
 				for (SCC newScc : afterDelete) {
-					for (var elem : scc.elems) {
+					for (var elem : newScc.elems) {
 						// Create "updated" as well so we can calculate edges for only the right sccs
 						sccs.put(elem, newScc);
 					}
@@ -253,12 +258,12 @@ public class IncrementalPointsTo<Node, HeapItem> {
 
 				// Now we just need to: update stale references in edgesForSCCs and reverseEdgesForSCCs
 				// For each edge (scc, A) removed from edges, remove (A, scc) from reverseEdges.
-				for (var toRemove : edgesForSCC.remove(scc)) {
+				for (var toRemove : edgesForSCC.removeSet(scc)) {
 					reverseEdgesForSCC.getSet(toRemove).remove(scc);
 				}
 				
 				// For each edge (scc, A) removed from reversed edges, remove (A, scc) from edges.
-				var as = reverseEdgesForSCC.remove(scc);
+				var as = reverseEdgesForSCC.removeSet(scc);
 				for (var a : as) {
 					edgesForSCC.getSet(a).remove(scc);
 				}
@@ -296,39 +301,45 @@ public class IncrementalPointsTo<Node, HeapItem> {
 			this.data = data;
 			this.edgesTo = edgesTo;
 		}
+		
+		@Override
+		public String toString() {
+			return data + "-->" + edgesTo;
+		}
 	}
 
 	// See https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
-	private final Deque<TarjanVertex> S = new ArrayDeque<>();
-	private int index = 0;
 	private List<SCC> tarjan(Iterable<Node> vs) {
+		Deque<TarjanVertex> S = new ArrayDeque<>();
+		int[] index = { 0 };
 		List<SCC> out = new ArrayList<>();
-		Map<Node, TarjanVertex> V = new HashMap<>();
+		Map<Node, TarjanVertex> V = new LinkedHashMap<>();
 		for (var v : vs) {
 			var edges = graph.edges(v);
 			V.put(v, new TarjanVertex(v, edges));
 		}
 		for (var v : V.values()) {
 			if (v.index < 0) { // if v.index is undefined,
-				strongconnect(V, v).ifPresent(out::add);
+				out.addAll(strongconnect(S, index, V, v));
 			}
 		}
 		return out;
 	}
 	
-	private Optional<SCC> strongconnect(Map<Node, TarjanVertex> V, TarjanVertex v) {
-		v.index = index;
-		v.lowlink = index;
-		index++;
+	private List<SCC> strongconnect(Deque<TarjanVertex> S, int[] index, Map<Node, TarjanVertex> V, TarjanVertex v) {
+		v.index = index[0];
+		v.lowlink = index[0];
+		index[0]++;
 		S.push(v);
 		v.onStack = true;
 		
 		// Consider successors of v
+		List<SCC> result = new ArrayList<>();
 		for (var wVtx : v.edgesTo) {
 			var w = V.get(wVtx);
 			if (w.index < 0) {
 				// Successor w has not yet been visited; recurse on it
-				strongconnect(V, w);
+				result.addAll(strongconnect(S, index, V, w));
 				v.lowlink = Math.min(v.lowlink, w.lowlink);
 			} else if (w.onStack) { 
 				// Successor w is in stack S and hence in the current SCC
@@ -341,7 +352,7 @@ public class IncrementalPointsTo<Node, HeapItem> {
 		
 		// If v is a root node, pop the stack and generate an SCC
 		if (v.lowlink == v.index) {
-			Set<Node> set = new HashSet<>();
+			Set<Node> set = new LinkedHashSet<>();
 			SCC scc = new SCC(v.data, set); // v is representative
 			TarjanVertex w;
 			do {
@@ -350,16 +361,15 @@ public class IncrementalPointsTo<Node, HeapItem> {
 				set.add(w.data);
 				sccs.put(w.data, scc);
 			} while (w != v);
-			return Optional.of(scc);
+			result.add(scc);
 		}
-		return Optional.empty();
+		return result;
 	}
 	
 	// DFS, returning path between nodes if present, or null if not.
 	private Set<SCC> path(SCC from, SCC to, Set<SCC> seen) {
 		if (from.equals(to)) {
-			Set<SCC> result = new HashSet<>();
-			result.add(from);
+			Set<SCC> result = new LinkedHashSet<>();
 			return result;
 		}
 
@@ -368,12 +378,22 @@ public class IncrementalPointsTo<Node, HeapItem> {
 				seen.add(next);
 				var path = path(next, to, seen);
 				if (path != null) {
-					path.add(from);
+					path.add(next);
 					return path;
 				}
 			}
 		}
 
 		return null;
+	}
+	
+	/** For testing only */
+	Map<Node, SCC> sccs() {
+		return sccs;
+	}
+	
+	/** For testing only */
+	MultiMap<SCC, SCC> edgesForSCC() {
+		return edgesForSCC;
 	}
 }

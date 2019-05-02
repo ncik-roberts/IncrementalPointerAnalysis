@@ -2,7 +2,7 @@ package edu.cmu.cs.cs15745.increpta.ast;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,7 +22,7 @@ import static edu.cmu.cs.cs15745.increpta.util.Util.join;
  * </ul>
  */
 public final class Ast {
-	private final Map<Variable, Function> staticFunctions = new HashMap<>();
+	private final Map<Variable, Function> staticFunctions = new LinkedHashMap<>();
 	private final BiMap<IClass, Variable, Function> instanceMethods = new BiMap<>();
 	private final List<Function> entryPoints;
 

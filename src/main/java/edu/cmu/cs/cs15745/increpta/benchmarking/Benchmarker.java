@@ -2,7 +2,7 @@ package edu.cmu.cs.cs15745.increpta.benchmarking;
 
 import com.ibm.wala.ipa.callgraph.impl.Util;
 
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
@@ -130,10 +130,10 @@ public final class Benchmarker {
 			state.totalInstructions++;
 			
 			var edges = builder.affectedEdges(inst);
-			Set<Pair<Node, C>> affectedNodes = new HashSet<>();
+			Set<Pair<Node, C>> affectedNodes = new LinkedHashSet<>();
 
 			/******** DELETION CITY ********/
-			if (DEBUG) System.out.println("Deleting SSA Instruction: " + inst);
+			if (DEBUG) System.err.println("Deleting SSA Instruction: " + inst);
 			long deletePointMS = System.currentTimeMillis();
 			for (var edge : edges) {
 				affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
@@ -141,7 +141,7 @@ public final class Benchmarker {
 			long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
 
 			/******** ADDITION CITY ********/
-			if (DEBUG) System.out.println("Adding SSA Instruction: " + inst);
+			if (DEBUG) System.err.println("Adding SSA Instruction: " + inst);
 			long addPointMS = System.currentTimeMillis();
 			for (var edge : edges) {
 				affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
@@ -149,6 +149,7 @@ public final class Benchmarker {
 			long addTimeMS = System.currentTimeMillis() - addPointMS;
 			
 			// Verify correctness by checking old pag vs. current pag
+			if (DEBUG) System.err.print("Checking correctness on " + affectedNodes.size() + " nodes...");
 			for (var node : affectedNodes) {
 				var oldPTS = pagCopy.pointsTo(node);
 				var newPTS = pag.pointsTo(node);
@@ -161,10 +162,10 @@ public final class Benchmarker {
 				}
 			}
 
-			if (DEBUG) System.out.println("Verified correctness! :)");
+			if (DEBUG) System.err.println("Verified correctness! :)");
 
 			// We done
-			if (DEBUG) System.out.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
+			if (DEBUG) System.err.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
 			state.totalDeleteTimeMS += deleteTimeMS;
 			state.totalAddTimeMS += addTimeMS;
 		}

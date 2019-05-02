@@ -76,9 +76,9 @@ public class TestInfo {
 
   public static final String TEST_METHOD_RECURSION = "Ldemandpa/TestMethodRecursion";
 
-  public static final String TEST_HASH_SET = "Ldemandpa/TestHashSet";
+  public static final String TEST_HASH_SET = "Ldemandpa/TestLinkedHashSet";
 
-  public static final String TEST_HASHMAP_GET = "Ldemandpa/TestHashMapGet";
+  public static final String TEST_LinkedHashMap_GET = "Ldemandpa/TestLinkedHashMapGet";
 
   public static final String TEST_LINKED_LIST = "Ldemandpa/TestLinkedList";
 
@@ -104,5 +104,5 @@ public class TestInfo {
 
   public static final String FLOWSTO_TEST_ARRAYSET_ITER = "Ldemandpa/FlowsToTestArraySetIter";
 
-  public static final String FLOWSTO_TEST_HASHSET = "Ldemandpa/FlowsToTestHashSet";
+  public static final String FLOWSTO_TEST_LinkedHashSet = "Ldemandpa/FlowsToTestLinkedHashSet";
 }

@@ -1,7 +1,7 @@
 package edu.cmu.cs.cs15745.increpta.ast;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,24 +46,24 @@ public final class AstFromWala {
 	private final Ast ast;
 
 	// Uniquely identify method signatures
-	private final Map<Selector, Ast.Variable> selectorToMethodName = new HashMap<>();
+	private final Map<Selector, Ast.Variable> selectorToMethodName = new LinkedHashMap<>();
 	private Ast.Variable methodName(Selector selector) {
 		return selectorToMethodName.computeIfAbsent(selector, s -> new Ast.Variable(s.toString()));
 	}
 	
 	// Uniquely identify static method signatures
-	private final Map<String, Ast.Variable> signatureToMethodName = new HashMap<>();
+	private final Map<String, Ast.Variable> signatureToMethodName = new LinkedHashMap<>();
 	private Ast.Variable staticMethodName(String signature) {
 		return signatureToMethodName.computeIfAbsent(signature, atom -> new Ast.Variable(atom.toString()));
 	}
 
 	// Uniquely identify classes
-	private final Map<TypeName, Ast.Type> typeNameToType = new HashMap<>();
+	private final Map<TypeName, Ast.Type> typeNameToType = new LinkedHashMap<>();
 	private Ast.Type type(IClass klass) {
 		return typeNameToType.computeIfAbsent(klass.getName(), name -> new Ast.Type(klass));
 	}
 
-	private final Map<Object, Ast.Variable> tokenToVariable = new HashMap<>();
+	private final Map<Object, Ast.Variable> tokenToVariable = new LinkedHashMap<>();
 	private Ast.Variable token(Object token) {
 		return tokenToVariable.computeIfAbsent(token, name -> new Ast.Variable("tok" + tokenToVariable.size()));
 	}
@@ -129,7 +129,7 @@ public final class AstFromWala {
 		// The result of building the instructions will be stored here.
 		private final List<Ast.Instruction> instructions = new ArrayList<>();
 
-		private final Map<Integer, Ast.Variable> variables = new HashMap<>();
+		private final Map<Integer, Ast.Variable> variables = new LinkedHashMap<>();
 		private Ast.Variable variable(int value) {
 			return variables.computeIfAbsent(value, i -> new Ast.Variable(varPrefix + i));
 		}

@@ -1,12 +1,12 @@
 package edu.cmu.cs.cs15745.increpta.util;
 
 import java.util.AbstractMap;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
 public class BiMap<K1, K2, V> extends AbstractMap<Pair<K1, K2>, V> {
-	private final Map<Pair<K1, K2>, V> map = new HashMap<>();
+	private final Map<Pair<K1, K2>, V> map = new LinkedHashMap<>();
 
 	@Override
 	public Set<Entry<Pair<K1, K2>, V>> entrySet() {

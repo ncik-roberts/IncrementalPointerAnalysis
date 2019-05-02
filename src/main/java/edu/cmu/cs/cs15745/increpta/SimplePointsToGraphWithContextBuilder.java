@@ -2,8 +2,8 @@ package edu.cmu.cs.cs15745.increpta;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -81,8 +81,8 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 	
 
 	// Correctly associating nodes with ast elements
-	private Map<Ast.Variable, Node> variables = new HashMap<>();
-	private Map<Ast.Instruction.Allocation, Node> heapItems = new HashMap<>();
+	private Map<Ast.Variable, Node> variables = new LinkedHashMap<>();
+	private Map<Ast.Instruction.Allocation, Node> heapItems = new LinkedHashMap<>();
 	private BiMap<Ast.Variable, Ast.Variable, Node> varFields = new BiMap<>();
 	private MultiMap<Pair<Node, C>, Pair<Pair<Ast.Instruction.Invocation, Ast.Variable>, C>> invocationMethodPairs = new MultiMap<>();
 
@@ -122,7 +122,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 		private final MultiMap<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> roots = new MultiMap<>();
 
 		// Added this round.
-		private final Set<Pair<Node, C>> added = new HashSet<>();
+		private final Set<Pair<Node, C>> added = new LinkedHashSet<>();
 
 		// Add the node to the added set if it was added this round.
 		Pair<Node, C> lookup(Ast.Variable var) {
@@ -229,7 +229,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 		
 		// This is where you put work.
 		private final Queue<Pair<Ast.Function, C>> workList = new ArrayDeque<>();
-		private final Set<Pair<Ast.Function, C>> seen = new HashSet<>();
+		private final Set<Pair<Ast.Function, C>> seen = new LinkedHashSet<>();
 
 		// Processing is visiting each of the instructions in a function.
 		void process(Pair<Ast.Function, C> job) {
@@ -352,7 +352,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 		Set<Pair<Node, Node>> result = inst.accept(new Instruction.Visitor<>() {
 			@Override
 			public Set<Pair<Node, Node>> visitAssignment(Assignment a) {
-				var result = new HashSet<Pair<Node, Node>>();
+				var result = new LinkedHashSet<Pair<Node, Node>>();
 				Optional.ofNullable(variables.get(a.source()))
 				  .ifPresent(n1 -> Optional.ofNullable(variables.get(a.target()))
 				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
@@ -361,7 +361,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 
 			@Override
 			public Set<Pair<Node, Node>> visitAllocation(Allocation a) {
-				var result = new HashSet<Pair<Node, Node>>();
+				var result = new LinkedHashSet<Pair<Node, Node>>();
 				Optional.ofNullable(heapItems.get(a))
 				  .ifPresent(n1 -> Optional.ofNullable(variables.get(a.target()))
 				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
@@ -370,7 +370,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 
 			@Override
 			public Set<Pair<Node, Node>> visitFieldWrite(FieldWrite fw) {
-				var result = new HashSet<Pair<Node, Node>>();
+				var result = new LinkedHashSet<Pair<Node, Node>>();
 				Optional.ofNullable(variables.get(fw.source()))
 				  .ifPresent(n1 -> Optional.ofNullable(varFields.get(fw.target(), fw.field()))
 				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));
@@ -379,7 +379,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 
 			@Override
 			public Set<Pair<Node, Node>> visitFieldRead(FieldRead fr) {
-				var result = new HashSet<Pair<Node, Node>>();
+				var result = new LinkedHashSet<Pair<Node, Node>>();
 				Optional.ofNullable(varFields.get(fr.source(), fr.field()))
 				  .ifPresent(n1 -> Optional.ofNullable(variables.get(fr.target()))
 				  .ifPresent(n2 -> result.add(Pair.of(n1, n2))));

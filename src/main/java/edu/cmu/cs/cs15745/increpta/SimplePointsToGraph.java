@@ -3,7 +3,7 @@ package edu.cmu.cs.cs15745.increpta;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -25,7 +25,7 @@ public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, 
 
 	// Disallow outside instantiation
 	SimplePointsToGraph() {
-		this(new MultiMap<>(), new MultiMap<>(), new HashSet<>());
+		this(new MultiMap<>(), new MultiMap<>(), new LinkedHashSet<>());
 	}
 
 	SimplePointsToGraph(MultiMap<Node, Node> graph, MultiMap<Node, HeapItem> pointsTo, Set<Node> nodes) {
@@ -80,7 +80,7 @@ public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, 
 
 	// Iterator that allows for a dfs branch to be abandoned
 	public DfsIterator<Node> dfs(Node from) {
-		Set<Node> seen = new HashSet<>();
+		Set<Node> seen = new LinkedHashSet<>();
 		Deque<Node> toVisit = new ArrayDeque<>();
 		toVisit.add(from);
 		seen.add(from);
@@ -121,6 +121,6 @@ public class SimplePointsToGraph<Node, HeapItem> implements PointsToGraph<Node, 
 	 * Clone. Don't care about Cloneable.
 	 */
 	public SimplePointsToGraph<Node, HeapItem> clone() {
-		return new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new HashSet<>(nodes));
+		return new SimplePointsToGraph<>(new MultiMap<>(graph), new MultiMap<>(pointsTo), new LinkedHashSet<>(nodes));
 	}
 }
