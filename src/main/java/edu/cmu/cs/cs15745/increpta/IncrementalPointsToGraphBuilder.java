@@ -31,13 +31,13 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
  *
  * @param <C> The type of context to associate with each node.
  */
-public class PointsToGraphWithContextBuilder<C> {
+public class IncrementalPointsToGraphBuilder<C> {
 	private final Ast ast;
 	private final IncrementalPointsTo<Pair<Node, C>, Pair<Allocation, C>>.Graph result; // The graph we are building
 	private final ContextBuilder<C> contextBuilder; // Strategy for merging contexts and creating new contexts.
-	public PointsToGraphWithContextBuilder(Ast ast, SimplePointsToGraphWithContext<C> result, ContextBuilder<C> contextBuilder) {
+	public IncrementalPointsToGraphBuilder(Ast ast, PointsToGraph<Pair<Node, C>, Pair<Allocation, C>> result, ContextBuilder<C> contextBuilder) {
 		this.ast = Objects.requireNonNull(ast);
-		this.result = Objects.requireNonNull(new IncrementalPointsTo<>(result).build());
+		this.result = new IncrementalPointsTo<>(result).build();
 		this.contextBuilder = Objects.requireNonNull(contextBuilder);
 	}
 	private boolean alreadyBuilt = false; // Can only be built once
@@ -57,7 +57,6 @@ public class PointsToGraphWithContextBuilder<C> {
 			workList.add(Pair.of(entryPoint, context));
 		}
 
-		// Now we use the on-the-fly alg to process the rest.
 		while (!workList.isEmpty()) {
 			var curr = workList.remove();
 			new GraphConstructor(curr).build();
@@ -202,6 +201,51 @@ public class PointsToGraphWithContextBuilder<C> {
 			var visitor = new Visitor(currentContext).visitor();
 			job.fst().body().instructions().forEach(i -> i.accept(visitor));
 		}
+
+		private void connectInvocationToFunction(Ast.Instruction.Invocation inv, Ast.Function f, C invContext) {
+			var fContext = contextBuilder.merge(invContext, f);
+			var params = f.params();
+			// Arguments includes both o and all of y
+			List<Ast.Variable> args = new ArrayList<>();
+			args.add(inv.source());
+			args.addAll(inv.arguments());
+
+			// This must be varargs.
+			if (args.size() != params.size()) {
+				// It's possible to pass 0 varargs to a function.
+				boolean validDifference = args.size() >= params.size() - 1;
+				if (!validDifference) {
+					throw new IllegalStateException(
+							String.format("Illegal call to: %s; expected %d params, got %d args",
+									f.name(), params.size(), args.size()));
+				}
+			}
+
+			int n = Math.min(args.size(), params.size());
+			for (int i = 0; i < n; i++) {
+				// Edge goes from y to y'
+				var y = var(args.get(i), invContext);
+				var yPrime = var(params.get(i), fContext);
+				result.addEdge(y, yPrime);
+			}
+			
+			// Add edge from return z to target x
+			var target = inv.target();
+			if (target.isPresent()) {
+				var x = var(target.get(), invContext);
+				for (var ret : f.body().returns()) {
+					var z = var(ret.returned(), fContext);
+					result.addEdge(z, x);
+				}
+			}
+			
+			// Add to worklist if needed
+			var job = Pair.of(f, fContext);
+			if (seen.add(job)) {
+				workList.add(job);
+			}
+		}
+
 		
 		// Visitor for the current context that adds to the worklist.
 		private final class Visitor extends Ast.Instruction.StatefulVisitor {
@@ -222,50 +266,6 @@ public class PointsToGraphWithContextBuilder<C> {
 				}
 			}
 			
-			private void connectInvocationToFunction(Ast.Instruction.Invocation inv, Ast.Function f, C invContext) {
-				var fContext = contextBuilder.merge(invContext, f);
-				var params = f.params();
-				// Arguments includes both o and all of y
-				List<Ast.Variable> args = new ArrayList<>();
-				args.add(inv.source());
-				args.addAll(inv.arguments());
-
-				// This must be varargs.
-				if (args.size() != params.size()) {
-					// It's possible to pass 0 varargs to a function.
-					boolean validDifference = args.size() >= params.size() - 1;
-					if (!validDifference) {
-						throw new IllegalStateException(
-								String.format("Illegal call to: %s; expected %d params, got %d args",
-										f.name(), params.size(), args.size()));
-					}
-				}
-
-				int n = Math.min(args.size(), params.size());
-				for (int i = 0; i < n; i++) {
-					// Edge goes from y to y'
-					var y = var(args.get(i), invContext);
-					var yPrime = var(params.get(i), fContext);
-					result.addEdge(y, yPrime);
-				}
-				
-				// Add edge from return z to target x
-				var target = inv.target();
-				if (target.isPresent()) {
-					var x = var(target.get(), invContext);
-					for (var ret : f.body().returns()) {
-						var z = var(ret.returned(), fContext);
-						result.addEdge(z, x);
-					}
-				}
-				
-				// Add to worklist if needed
-				var job = Pair.of(f, fContext);
-				if (seen.add(job)) {
-					workList.add(job);
-				}
-			}
-
 			// Rule 5: x = o.m(y), calling m(y'){ return z }
 			@Override
 			public void iterInvocation(Ast.Instruction.Invocation inv) {

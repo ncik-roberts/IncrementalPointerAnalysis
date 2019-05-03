@@ -25,7 +25,7 @@ import edu.cmu.cs.cs15745.increpta.IncrementalPointsTo;
 import edu.cmu.cs.cs15745.increpta.PointsToGraph;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext.Node;
-import edu.cmu.cs.cs15745.increpta.PointsToGraphWithContextBuilder;
+import edu.cmu.cs.cs15745.increpta.IncrementalPointsToGraphBuilder;
 import edu.cmu.cs.cs15745.increpta.ast.Ast;
 import edu.cmu.cs.cs15745.increpta.ast.AstFromWala;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
@@ -58,7 +58,7 @@ public final class Benchmarker {
 		}
 	}
 
-	public void test(String mainClassName) {
+	public void test(String mainClassName, TestState state) {
 		System.out.println("Starting analysis on " + mainClassName);
 		long pointStart = System.currentTimeMillis();
 
@@ -81,20 +81,19 @@ public final class Benchmarker {
 		System.out.println(String.format("\tAST conversion: %.3fs", timeAST / 1000D));
 
 		// Starting building pointsToGraph
-		var builder = new PointsToGraphWithContextBuilder<>(
+		var builder = new IncrementalPointsToGraphBuilder<>(
 				ast,
 				new SimplePointsToGraphWithContext<>(),
 				ContextBuilders.NO_CONTEXT);
 
 		var pag = builder.build();
+		pag.checkInvariant();
 
 		long pointPAG = System.currentTimeMillis();
 		long timePAG = pointPAG - pointAST;
 		System.out.println(String.format("\tPAG construction: %.3fs", timePAG / 1000D));
 		System.out.println("There are " + pag.nodes().size() + " nodes with " + pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum() + " pointed to.");
 		
-		TestState state = new TestState();
-
 		// Test static methods
 		var pagCopy = pag.clone();
 		for (var f : ast.staticFunctions().values()) {
@@ -105,73 +104,73 @@ public final class Benchmarker {
 		for (var f : ast.instanceMethods().values()) {
 			testNode(f.body(), pag, pagCopy, builder, state);
 		}
-
-		System.out.println("===== Total statistics: =====");
-		System.out.printf("  Total additions/deletions: %d\n", state.totalInstructions);
-		System.out.printf("  Total deletion time: %.3fs\n", state.totalDeleteTimeMS / 1000D);
-		System.out.printf("  Mean deletion time:  %.3fs\n", state.totalDeleteTimeMS / 1000D / state.totalInstructions);
-		System.out.printf("  Total add time: %.3fs\n", state.totalAddTimeMS / 1000D);
-		System.out.printf("  Mean add time:  %.3fs\n", state.totalAddTimeMS / 1000D / state.totalInstructions);
 	}
 	
 	// Test adding and removing each instruction in the node, updating the state
 	// based on the run.
 	private <C> void testNode(
 			Ast.FunctionBody body,
-			PointsToGraph<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> pag, // Run incremental add / delete
+			IncrementalPointsTo<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>>.Graph pag, // Run incremental add / delete
 			PointsToGraph<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> pagCopy, // Check correctness
-			PointsToGraphWithContextBuilder<C> builder, // Convert ast instruction to graph nodes
+			IncrementalPointsToGraphBuilder<C> builder, // Convert ast instruction to graph nodes
 			TestState state) {
 		for (var inst : body.instructions()) {
 			if (inst == null) {
 				continue;
 			}
 
-			state.totalInstructions++;
-			
 			var edges = builder.affectedEdges(inst);
 			Set<Pair<Node, C>> affectedNodes = new LinkedHashSet<>();
 
 			/******** DELETION CITY ********/
-			if (DEBUG) System.err.println("Deleting SSA Instruction: " + inst);
+			if (DEBUG) System.err.println("Deleting SSA Instruction: " + inst + " (" + edges + ")");
 			long deletePointMS = System.currentTimeMillis();
 			for (var edge : edges) {
 				affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
 			}
 			long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
+			if (DEBUG && affectedNodes.size() > 0) pag.checkInvariant();
 
 			/******** ADDITION CITY ********/
-			if (DEBUG) System.err.println("Adding SSA Instruction: " + inst);
+			if (DEBUG) System.err.println("Adding SSA Instruction: " + inst + " (" + edges + ")");
 			long addPointMS = System.currentTimeMillis();
 			for (var edge : edges) {
 				affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
 			}
 			long addTimeMS = System.currentTimeMillis() - addPointMS;
+			if (DEBUG && affectedNodes.size() > 0) pag.checkInvariant();
 			
-			// Verify correctness by checking old pag vs. current pag
-			if (DEBUG) System.err.print("Checking correctness on " + affectedNodes.size() + " nodes...");
-			for (var node : affectedNodes) {
-				var oldPTS = pagCopy.pointsTo(node);
-				var newPTS = pag.pointsTo(node);
-				if (!oldPTS.equals(newPTS)) {
-					System.err.println("Old PTS: " + oldPTS);
-					System.err.println("New PTS: " + newPTS);
-					System.err.println("For node: " + node);
-					System.err.println("For instruction: " + inst);
-					throw new IllegalStateException("It is illegal to be wrong.");
+			if (affectedNodes.size() > 0) {
+				// Verify correctness by checking old pag vs. current pag
+				if (DEBUG) {
+					System.err.println("Checking correctness on " + affectedNodes.size() + " nodes...");
 				}
+
+				for (var node : affectedNodes) {
+					var oldPTS = pagCopy.pointsTo(node);
+					var newPTS = pag.pointsTo(node);
+					if (!oldPTS.equals(newPTS)) {
+						System.err.println("Old PTS: " + oldPTS);
+						System.err.println("New PTS: " + newPTS);
+						System.err.println("For node: " + node);
+						System.err.println("For instruction: " + inst);
+						throw new IllegalStateException("It is illegal to be wrong.");
+					}
+				}
+
+				if (DEBUG) System.err.println("Verified correctness! :)");
+
+				// We done
+				if (DEBUG) System.err.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
+			
+				state.totalInstructions++;
+				state.totalDeleteTimeMS += deleteTimeMS;
+				state.totalAddTimeMS += addTimeMS;
 			}
-
-			if (DEBUG) System.err.println("Verified correctness! :)");
-
-			// We done
-			if (DEBUG) System.err.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
-			state.totalDeleteTimeMS += deleteTimeMS;
-			state.totalAddTimeMS += addTimeMS;
 		}
 	}
 	
-	private static class TestState {
+	static class TestState {
 		int totalInstructions = 0;
 		long totalDeleteTimeMS = 0;
 		long totalAddTimeMS = 0;

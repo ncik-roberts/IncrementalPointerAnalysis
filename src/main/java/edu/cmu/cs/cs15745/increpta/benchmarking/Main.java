@@ -3,6 +3,8 @@ package edu.cmu.cs.cs15745.increpta.benchmarking;
 import java.util.List;
 import java.util.Map;
 
+import edu.cmu.cs.cs15745.increpta.benchmarking.Benchmarker.TestState;
+
 public final class Main {
 	
 	private final static Map<String, List<String>> ALL =
@@ -65,6 +67,14 @@ public final class Main {
 		System.out.println("==============");
 		System.out.println("Testing " + scopeFile);
 		System.out.println("==============");
-		mainClasses.forEach(new Benchmarker(scopeFile, "exclusions.txt")::test);
+		var benchmarker = new Benchmarker(scopeFile, "exclusions.txt");
+		var state = new TestState();
+		mainClasses.forEach(cl -> benchmarker.test(cl, state));
+		System.out.println("===== Total statistics: =====");
+		System.out.printf("  Total additions/deletions: %d\n", state.totalInstructions);
+		System.out.printf("  Total deletion time: %.3fs\n", state.totalDeleteTimeMS / 1000D);
+		System.out.printf("  Mean deletion time:  %.3fs\n", state.totalDeleteTimeMS / 1000D / state.totalInstructions);
+		System.out.printf("  Total add time: %.3fs\n", state.totalAddTimeMS / 1000D);
+		System.out.printf("  Mean add time:  %.3fs\n", state.totalAddTimeMS / 1000D / state.totalInstructions);
 	}
 }
