@@ -43,7 +43,7 @@ public class SimplePointsToGraphWithContext<C> extends SimplePointsToGraph<Pair<
 				}
 				
 				public String toString() {
-					return item.toString();
+					return "v" + hashCode() % 1000 + "";//item.toString();
 				}
 			};
 		}
@@ -56,7 +56,7 @@ public class SimplePointsToGraphWithContext<C> extends SimplePointsToGraph<Pair<
 				}
 
 				public String toString() {
-					return item.toString() + "." + field.toString();
+					return "vf" + hashCode() % 1000; //item.toString() + "." + field.toString();
 				}
 			};
 		}
@@ -69,7 +69,7 @@ public class SimplePointsToGraphWithContext<C> extends SimplePointsToGraph<Pair<
 				}
 
 				public String toString() {
-					return item.toString();
+					return "hi" + hashCode() % 1000 + ""; //item.toString();
 				}
 			};
 		}

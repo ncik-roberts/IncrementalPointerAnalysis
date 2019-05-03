@@ -27,21 +27,21 @@ import edu.cmu.cs.cs15745.increpta.util.MultiMap;
 import edu.cmu.cs.cs15745.increpta.util.Pair;
 
 /**
- * Create a simple points-to-graph from an AST with context C.
+ * Create an incrementally-updating points-to-graph from an AST with context C.
  *
  * @param <C> The type of context to associate with each node.
  */
-public class SimplePointsToGraphWithContextBuilder<C> {
+public class IncrementalPointsToGraphBuilder<C> {
 	private final Ast ast;
-	private final SimplePointsToGraphWithContext<C> result; // The graph we are building
+	private final IncrementalPointsTo<Pair<Node, C>, Pair<Allocation, C>>.Graph result; // The graph we are building
 	private final ContextBuilder<C> contextBuilder; // Strategy for merging contexts and creating new contexts.
-	public SimplePointsToGraphWithContextBuilder(Ast ast, SimplePointsToGraphWithContext<C> result, ContextBuilder<C> contextBuilder) {
+	public IncrementalPointsToGraphBuilder(Ast ast, PointsToGraph<Pair<Node, C>, Pair<Allocation, C>> result, ContextBuilder<C> contextBuilder) {
 		this.ast = Objects.requireNonNull(ast);
-		this.result = Objects.requireNonNull(result);
+		this.result = new IncrementalPointsTo<>(result).build();
 		this.contextBuilder = Objects.requireNonNull(contextBuilder);
 	}
 	private boolean alreadyBuilt = false; // Can only be built once
-	public SimplePointsToGraphWithContext<C> build() {
+	public IncrementalPointsTo<Pair<Node, C>, Pair<Allocation, C>>.Graph build() {
 		if (alreadyBuilt) {
 			throw new IllegalStateException("Already called build.");
 		}
@@ -57,20 +57,9 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			workList.add(Pair.of(entryPoint, context));
 		}
 
-		// Now we use the on-the-fly alg to process the rest.
 		while (!workList.isEmpty()) {
 			var curr = workList.remove();
-			var roots = new GraphConstructor(curr).calculateRoots();
-			for (var pair : roots.entrySet()) {
-				var root = pair.getKey();
-				var patch = pair.getValue();
-				for (var dfs = result.dfs(root); dfs.hasNext(); ) {
-					var node = dfs.next();
-					if (!result.pointsTo(node).addAll(patch)) {
-						dfs.abandonBranch();
-					}
-				}
-			}
+			new GraphConstructor(curr).build();
 			
 			// Visit the instructions in the function body.
 			onTheFly.process(curr);
@@ -119,8 +108,6 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			context = job.snd();
 		}
 
-		private final MultiMap<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> roots = new MultiMap<>();
-
 		// Add the node to the added set if it was added this round.
 		Pair<Node, C> lookup(Ast.Variable var) {
 			return var(var, context);
@@ -131,11 +118,6 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			return varFields(var, field, context);
 		}
 		
-		void addEdge(Pair<Node, C> from, Pair<Node, C> to) {
-			result.addEdge(from, to);
-			roots.getSet(to).addAll(result.pointsTo(from)); // To propagate
-		}
-		
 		// Calculate roots can only be run once.
 		private boolean alreadyRun = false;
 
@@ -144,23 +126,22 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 		 * The client of this function should likely use DFS to add heapItems to
 		 * all nodes reachable from the root nodes.
 		 */
-		MultiMap<Pair<Node, C>, Pair<Ast.Instruction.Allocation, C>> calculateRoots() {
+		void build() {
 			if (alreadyRun) {
 				throw new IllegalStateException("already run calculateRoots");
 			}
 			alreadyRun = true;
-			instructions.forEach(i -> i.accept(rootFinder));
-			return roots;
+			instructions.forEach(i -> i.accept(build));
 		}
 		
 		// See paper: "ECHO: Instantaneous In Situ Race Detection in the IDE"
 		// p.780
 		// https://parasol.tamu.edu/~jeff/academic/echo.pdf
-		private final Ast.Instruction.Visitor<?> rootFinder = new Ast.Instruction.StatefulVisitor() {
+		private final Ast.Instruction.Visitor<?> build = new Ast.Instruction.StatefulVisitor() {
 			// Rule 2
 			@Override
 			public void iterAssignment(Ast.Instruction.Assignment a) {
-				addEdge(lookup(a.source()), lookup(a.target()));
+				result.addEdge(lookup(a.source()), lookup(a.target()));
 			}
 			// Rule 1
 			@Override
@@ -168,22 +149,19 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 				var node = heapItem(a, context);
 				var target = lookup(a.target());
 				result.pointsTo(node).add(Pair.of(a, context));
-			  // Don't call "addEdge" here as an optimization, since we know this adds a single element
-			  // to the points-to set of "target".
-				roots.getSet(target).add(Pair.of(a, context)); // To propagate
 				result.addEdge(node, target);
 			}
 
 			// Rule 4; x.f = y
 			@Override
 			public void iterFieldWrite(Ast.Instruction.FieldWrite fw) {
-				addEdge(lookup(fw.source()), lookup(fw.target(), fw.field()));
+				result.addEdge(lookup(fw.source()), lookup(fw.target(), fw.field()));
 			}
 
 			// Rule 3; x = y.f
 			@Override
 			public void iterFieldRead(Ast.Instruction.FieldRead fr) {
-				addEdge(lookup(fr.source(), fr.field()), lookup(fr.target()));
+				result.addEdge(lookup(fr.source(), fr.field()), lookup(fr.target()));
 			}
 			
 			// Rule 5 specialized for static functions
@@ -196,7 +174,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 				var args = s.arguments();
 				int n = Math.min(args.size(), params.size());
 				for (int i = 0; i < n; i++) {
-					addEdge(lookup(args.get(i)), lookup(params.get(i)));
+					result.addEdge(lookup(args.get(i)), lookup(params.get(i)));
 				}
 				
 				// Add edge from return z to target x
@@ -204,7 +182,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 					var x = lookup(target);
 					for (var ret : f.body().returns()) {
 						var z = lookup(ret.returned());
-						addEdge(x, z);
+						result.addEdge(x, z);
 					}
 				});
 			}
@@ -223,6 +201,51 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 			var visitor = new Visitor(currentContext).visitor();
 			job.fst().body().instructions().forEach(i -> i.accept(visitor));
 		}
+
+		private void connectInvocationToFunction(Ast.Instruction.Invocation inv, Ast.Function f, C invContext) {
+			var fContext = contextBuilder.merge(invContext, f);
+			var params = f.params();
+			// Arguments includes both o and all of y
+			List<Ast.Variable> args = new ArrayList<>();
+			args.add(inv.source());
+			args.addAll(inv.arguments());
+
+			// This must be varargs.
+			if (args.size() != params.size()) {
+				// It's possible to pass 0 varargs to a function.
+				boolean validDifference = args.size() >= params.size() - 1;
+				if (!validDifference) {
+					throw new IllegalStateException(
+							String.format("Illegal call to: %s; expected %d params, got %d args",
+									f.name(), params.size(), args.size()));
+				}
+			}
+
+			int n = Math.min(args.size(), params.size());
+			for (int i = 0; i < n; i++) {
+				// Edge goes from y to y'
+				var y = var(args.get(i), invContext);
+				var yPrime = var(params.get(i), fContext);
+				result.addEdge(y, yPrime);
+			}
+			
+			// Add edge from return z to target x
+			var target = inv.target();
+			if (target.isPresent()) {
+				var x = var(target.get(), invContext);
+				for (var ret : f.body().returns()) {
+					var z = var(ret.returned(), fContext);
+					result.addEdge(z, x);
+				}
+			}
+			
+			// Add to worklist if needed
+			var job = Pair.of(f, fContext);
+			if (seen.add(job)) {
+				workList.add(job);
+			}
+		}
+
 		
 		// Visitor for the current context that adds to the worklist.
 		private final class Visitor extends Ast.Instruction.StatefulVisitor {
@@ -242,77 +265,7 @@ public class SimplePointsToGraphWithContextBuilder<C> {
 					workList.add(job);
 				}
 			}
-
-			// Connect two nodes.
-			// Also propagate points-to set through dfs.
-			private void connect(Pair<Node, C> from, Pair<Node, C> to) {
-				if (!result.addEdge(from, to).isEmpty()) { // This short-circuiting prevents infinite recursion
-					var pointsTo = result.pointsTo(from);
-					for (var dfs = result.dfs(to); dfs.hasNext(); ) {
-						var node = dfs.next();
-						if (!result.pointsTo(node).addAll(pointsTo)) {
-							dfs.abandonBranch();
-						}
-						
-						// Propagate to called methods, potentially.
-						for (var pair : invocationMethodPairs(node)) {
-							var inv = pair.fst().fst();
-							var method = pair.fst().snd();
-							var ctx = pair.snd();
-							for (var heapItem : List.copyOf(pointsTo)) {
-								// If lookup succeeds, add the item.
-								ast.instanceMethod(heapItem.fst().type(), method)
-								   .ifPresent(f -> connectInvocationToFunction(inv, f, ctx));
-							}
-						}
-					}
-				}
-			}
 			
-			private void connectInvocationToFunction(Ast.Instruction.Invocation inv, Ast.Function f, C invContext) {
-				var fContext = contextBuilder.merge(invContext, f);
-				var params = f.params();
-				// Arguments includes both o and all of y
-				List<Ast.Variable> args = new ArrayList<>();
-				args.add(inv.source());
-				args.addAll(inv.arguments());
-
-				// This must be varargs.
-				if (args.size() != params.size()) {
-					// It's possible to pass 0 varargs to a function.
-					boolean validDifference = args.size() >= params.size() - 1;
-					if (!validDifference) {
-						throw new IllegalStateException(
-								String.format("Illegal call to: %s; expected %d params, got %d args",
-										f.name(), params.size(), args.size()));
-					}
-				}
-
-				int n = Math.min(args.size(), params.size());
-				for (int i = 0; i < n; i++) {
-					// Edge goes from y to y'
-					var y = var(args.get(i), invContext);
-					var yPrime = var(params.get(i), fContext);
-					connect(y, yPrime);
-				}
-				
-				// Add edge from return z to target x
-				var target = inv.target();
-				if (target.isPresent()) {
-					var x = var(target.get(), invContext);
-					for (var ret : f.body().returns()) {
-						var z = var(ret.returned(), fContext);
-						connect(z, x);
-					}
-				}
-				
-				// Add to worklist if needed
-				var job = Pair.of(f, fContext);
-				if (seen.add(job)) {
-					workList.add(job);
-				}
-			}
-
 			// Rule 5: x = o.m(y), calling m(y'){ return z }
 			@Override
 			public void iterInvocation(Ast.Instruction.Invocation inv) {
