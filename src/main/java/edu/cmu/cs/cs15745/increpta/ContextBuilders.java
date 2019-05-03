@@ -20,6 +20,11 @@ public final class ContextBuilders {
     public Unit merge(Unit originalContext, Function call) {
       return Unit.UNIT;
     }
+    
+    @Override
+    public String toString() {
+      return "No context";
+    }
   };
 
   // Give me a finite calling context, capped at n:
@@ -42,6 +47,10 @@ public final class ContextBuilders {
         return result;
       }
 
+      @Override
+      public String toString() {
+        return String.format("%d-context", n);
+      }
     };
   }
 }

@@ -3,6 +3,7 @@ package edu.cmu.cs.cs15745.increpta.benchmarking;
 import java.util.List;
 import java.util.Map;
 
+import edu.cmu.cs.cs15745.increpta.ContextBuilders;
 import edu.cmu.cs.cs15745.increpta.benchmarking.Benchmarker.TestState;
 
 public final class Main {
@@ -51,7 +52,8 @@ public final class Main {
     
   
   public static void main(String[] args) {
-    benchmarkAll();
+    var x = "wala.testdata_h2.txt";
+    benchmark(x, ALL.get(x));
   }
   
   private static final void benchmarkAll() {
@@ -68,13 +70,19 @@ public final class Main {
     System.out.println("Testing " + scopeFile);
     System.out.println("==============");
     var benchmarker = new Benchmarker(scopeFile, "exclusions.txt");
-    var state = new TestState();
-    mainClasses.forEach(cl -> benchmarker.test(cl, state));
-    System.out.println("===== Total statistics: =====");
-    System.out.printf("  Total additions/deletions: %d\n", state.totalInstructions);
-    System.out.printf("  Total deletion time: %.3fs\n", state.totalDeleteTimeMS / 1000D);
-    System.out.printf("  Mean deletion time:  %.3fs\n", state.totalDeleteTimeMS / 1000D / state.totalInstructions);
-    System.out.printf("  Total add time: %.3fs\n", state.totalAddTimeMS / 1000D);
-    System.out.printf("  Mean add time:  %.3fs\n", state.totalAddTimeMS / 1000D / state.totalInstructions);
+    for (var ctxBuilder : List.of(
+        ContextBuilders.NO_CONTEXT,
+        ContextBuilders.nCallContext(1),
+        ContextBuilders.nCallContext(2),
+        ContextBuilders.nCallContext(3))) {
+      var state = new TestState();
+      mainClasses.forEach(cl -> benchmarker.test(cl, ctxBuilder, state));
+      System.out.printf("===== Total statistics (%s): =====\n", ctxBuilder);
+      System.out.printf("  Total additions/deletions: %d\n", state.totalInstructions);
+      System.out.printf("  Total deletion time: %.3fs\n", state.totalDeleteTimeMS / 1000D);
+      System.out.printf("  Mean deletion time:  %.3fs\n", state.totalDeleteTimeMS / 1000D / state.totalInstructions);
+      System.out.printf("  Total add time: %.3fs\n", state.totalAddTimeMS / 1000D);
+      System.out.printf("  Mean add time:  %.3fs\n", state.totalAddTimeMS / 1000D / state.totalInstructions);
+    }
   }
 }

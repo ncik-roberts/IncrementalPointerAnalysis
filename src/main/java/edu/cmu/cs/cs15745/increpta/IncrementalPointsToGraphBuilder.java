@@ -294,7 +294,7 @@ public class IncrementalPointsToGraphBuilder<C> {
    * Get the edges involved in the instruction.
    */
   public Set<Pair<Pair<Node, C>, Pair<Node, C>>> affectedEdges(Instruction inst) {
-    Set<Pair<Node, Node>> result = inst.accept(new Instruction.Visitor<>() {
+    var answer = inst.accept(new Instruction.Visitor<Set<Pair<Node, Node>>>() {
       @Override
       public Set<Pair<Node, Node>> visitAssignment(Assignment a) {
         var result = new LinkedHashSet<Pair<Node, Node>>();
@@ -345,12 +345,13 @@ public class IncrementalPointsToGraphBuilder<C> {
     });
 
     // Flatmap over all contexts for each returned node.
-    return result.stream().flatMap(pair -> {
+    return answer.stream().flatMap(pair -> {
       var n1 = pair.fst();
       var n2 = pair.snd();
       return contextsForNode.get(n1).stream().flatMap(c1 -> {
         var v1 = Pair.of(n1, c1);
-        return contextsForNode.get(n2).stream().map(c2 -> Pair.of(v1, Pair.of(n2, c2)));
+        return contextsForNode.get(n2).stream().map(c2 -> Pair.of(v1, Pair.of(n2, c2)))
+            .filter(p -> result.edges(p.fst()).contains(p.snd()));
       });
     }).collect(Collectors.toSet());
   }

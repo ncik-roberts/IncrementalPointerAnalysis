@@ -20,7 +20,7 @@ import com.ibm.wala.ipa.cha.ClassHierarchyFactory;
 import com.ibm.wala.util.config.AnalysisScopeReader;
 import com.ibm.wala.util.io.FileProvider;
 
-import edu.cmu.cs.cs15745.increpta.ContextBuilders;
+import edu.cmu.cs.cs15745.increpta.ContextBuilder;
 import edu.cmu.cs.cs15745.increpta.IncrementalPointsTo;
 import edu.cmu.cs.cs15745.increpta.PointsToGraph;
 import edu.cmu.cs.cs15745.increpta.SimplePointsToGraphWithContext;
@@ -54,8 +54,8 @@ public final class Benchmarker {
       throw new IllegalStateException(cancel);
     }
   }
-
-  public void test(String mainClassName, TestState state) {
+  
+  public <C> void test(String mainClassName, ContextBuilder<C> ctxBuilder, TestState state) {
     System.out.println("Starting analysis on " + mainClassName);
     long pointStart = System.currentTimeMillis();
 
@@ -78,10 +78,10 @@ public final class Benchmarker {
 
     // Starting building pointsToGraph
     var builder = new IncrementalPointsToGraphBuilder<>(ast, new SimplePointsToGraphWithContext<>(),
-        ContextBuilders.NO_CONTEXT);
+        ctxBuilder);
 
     var pag = builder.build();
-    pag.checkInvariant();
+    pag.checkInvariant(); // make sure it was correctly constructed
 
     long pointPAG = System.currentTimeMillis();
     long timePAG = pointPAG - pointAST;
@@ -126,7 +126,7 @@ public final class Benchmarker {
       long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
       if (DEBUG && affectedNodes.size() > 0)
         pag.checkInvariant();
-
+      
       /******** ADDITION CITY ********/
       if (DEBUG)
         System.err.println("Adding SSA Instruction: " + inst + " (" + edges + ")");
