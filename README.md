@@ -38,4 +38,4 @@ $ gradle test
 
 The properties of correctness that `IPA_DEBUG` checks are the following:
   * Removing and then re-adding a statement from the program acts as the identity function on the pointer analysis graph. (I.e., adding an edge reverses the changes induced by removing that edge.)
-  * For each node in the pointer analysis graph, its points-to set is exactly the union of its predecessors (except for any allocation site, whose points-to sets is exactly itself).
+  * For each node in the pointer analysis graph, its points-to set is exactly the union of its predecessors (except for any allocation site, whose points-to set is exactly itself).
