@@ -98,11 +98,12 @@ public final class Benchmarker {
         ctxBuilder);
 
     var pag = builder.build();
-    pag.checkInvariant(); // make sure it was correctly constructed
 
     long pointPAG = System.currentTimeMillis();
     long timePAG = pointPAG - pointStart;
     state.pagConstructionMS += timePAG;
+
+    pag.checkInvariant(); // make sure it was correctly constructed
 
     // Accumulate the number of nodes and the size of points-to sets.
     var nonEmptyNodeSummary =
