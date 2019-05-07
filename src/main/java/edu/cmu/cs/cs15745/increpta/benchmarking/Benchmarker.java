@@ -126,16 +126,18 @@ public final class Benchmarker {
       Set<Pair<Node, C>> affectedNodes = new LinkedHashSet<>();
 
       /******** DELETION CITY ********/
-      if (VERBOSE)
+      if (VERBOSE) {
         System.err.println("Deleting SSA Instruction: " + inst + " (" + edges + ")");
+      }
       long deletePointMS = System.currentTimeMillis();
       for (var edge : edges) {
         affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
       }
       long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
-      if (DEBUG && affectedNodes.size() > 0)
+      if (DEBUG && affectedNodes.size() > 0) {
         pag.checkInvariant();
-      
+      }
+
       /******** ADDITION CITY ********/
       if (VERBOSE)
         System.err.println("Adding SSA Instruction: " + inst + " (" + edges + ")");
@@ -144,13 +146,17 @@ public final class Benchmarker {
         affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
       }
       long addTimeMS = System.currentTimeMillis() - addPointMS;
-      if (DEBUG && affectedNodes.size() > 0)
+      if (DEBUG && affectedNodes.size() > 0) {
         pag.checkInvariant();
+      }
 
       if (affectedNodes.size() > 0) {
         if (DEBUG) {
+          if (VERBOSE) {
+            System.err.println("Checking correctness on " + affectedNodes.size() + " nodes...");
+          }
+
           // Verify correctness by checking old pag vs. current pag
-          System.err.println("Checking correctness on " + affectedNodes.size() + " nodes...");
 
           for (var node : affectedNodes) {
             var oldPTS = pagCopy.pointsTo(node);
@@ -164,13 +170,15 @@ public final class Benchmarker {
             }
           }
 
-          if (VERBOSE)
+          if (VERBOSE) {
             System.err.println("Verified correctness! :)");
+          }
         }
 
         // We done
-        if (VERBOSE)
+        if (VERBOSE) {
           System.err.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
+        }
 
         state.totalInstructions++;
         state.totalDeleteTimeMS += deleteTimeMS;
