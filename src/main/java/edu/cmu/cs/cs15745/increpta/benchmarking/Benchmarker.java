@@ -33,8 +33,18 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
 /** Run some benchmarks. */
 public final class Benchmarker {
 
-  private static final boolean DEBUG = System.getenv("IPA_DEBUG") != null;
-  private static final boolean VERBOSE = System.getenv("IPA_VERBOSE") != null;
+  private static final int DEBUG = swallow(() -> {
+    var debugLevel = System.getenv("IPA_DEBUG");
+    if (debugLevel != null) {
+      try {
+        return Integer.parseInt(debugLevel);
+      } catch (Exception e) {
+        return 0;
+      }
+    }
+    return 0;
+  });
+  
   private final AnalysisScope scope;
   private final ClassHierarchy cha;
 
@@ -65,7 +75,7 @@ public final class Benchmarker {
 
     long pointCFG = System.currentTimeMillis();
     long timeCFG = pointCFG - pointStart;
-    System.out.println(String.format("\tCFG construction: %.3fs", timeCFG / 1000D));
+    System.out.println(String.format("\tCFG construction: %.3fs", timeCFG / 1_000D));
 
     // Starting building astFromWala. A node is an entrypoint if its method is an
     // entry method.
@@ -75,7 +85,7 @@ public final class Benchmarker {
 
     long pointAST = System.currentTimeMillis();
     long timeAST = pointAST - pointCFG;
-    System.out.println(String.format("\tAST conversion: %.3fs", timeAST / 1000D));
+    System.out.println(String.format("\tAST conversion: %.3fs", timeAST / 1_000D));
 
     return ast;
   }
@@ -92,11 +102,16 @@ public final class Benchmarker {
 
     long pointPAG = System.currentTimeMillis();
     long timePAG = pointPAG - pointStart;
-    System.out.println(String.format("\tPAG construction: %.3fs", timePAG / 1000D));
+    state.pagConstructionMS += timePAG;
 
     // Accumulate the number of nodes and the size of points-to sets.
-    state.totalNodes += pag.nodes().size();
-    state.totalPointsTo = pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum();
+    var nonEmptyNodeSummary =
+      pag.nodes().stream()
+         .mapToInt(n -> pag.pointsTo(n).size())
+         .filter(i -> i > 0)
+         .summaryStatistics();
+    state.totalNodes += nonEmptyNodeSummary.getCount();
+    state.totalPointsTo += nonEmptyNodeSummary.getSum();
 
     // Test static methods
     var pagCopy = pag.clone();
@@ -126,33 +141,33 @@ public final class Benchmarker {
       Set<Pair<Node, C>> affectedNodes = new LinkedHashSet<>();
 
       /******** DELETION CITY ********/
-      if (VERBOSE) {
+      if (DEBUG >= 3) {
         System.err.println("Deleting SSA Instruction: " + inst + " (" + edges + ")");
       }
-      long deletePointMS = System.currentTimeMillis();
+      long deletePointNS = System.nanoTime();
       for (var edge : edges) {
         affectedNodes.addAll(pag.deleteEdge(edge.fst(), edge.snd()));
       }
-      long deleteTimeMS = System.currentTimeMillis() - deletePointMS;
-      if (DEBUG && affectedNodes.size() > 0) {
+      long deleteTimeNS = System.nanoTime() - deletePointNS;
+      if (DEBUG >= 2 && affectedNodes.size() > 0) {
         pag.checkInvariant();
       }
 
       /******** ADDITION CITY ********/
-      if (VERBOSE)
+      if (DEBUG >= 3)
         System.err.println("Adding SSA Instruction: " + inst + " (" + edges + ")");
-      long addPointMS = System.currentTimeMillis();
+      long addPointNS = System.nanoTime();
       for (var edge : edges) {
         affectedNodes.addAll(pag.addEdge(edge.fst(), edge.snd()));
       }
-      long addTimeMS = System.currentTimeMillis() - addPointMS;
-      if (DEBUG && affectedNodes.size() > 0) {
+      long addTimeNS = System.nanoTime() - addPointNS;
+      if (DEBUG >= 2 && affectedNodes.size() > 0) {
         pag.checkInvariant();
       }
 
       if (affectedNodes.size() > 0) {
-        if (DEBUG) {
-          if (VERBOSE) {
+        if (DEBUG >= 1) {
+          if (DEBUG >= 3) {
             System.err.println("Checking correctness on " + affectedNodes.size() + " nodes...");
           }
 
@@ -170,29 +185,38 @@ public final class Benchmarker {
             }
           }
 
-          if (VERBOSE) {
+          if (DEBUG >= 3) {
             System.err.println("Verified correctness! :)");
           }
         }
 
         // We done
-        if (VERBOSE) {
-          System.err.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
+        if (DEBUG >= 3) {
+          System.err.printf("Delete time: %.3fms\nAdd time: %.3fms\n", deleteTimeNS / 1_000_000D, addTimeNS / 1_000_000D);
         }
 
         state.totalInstructions++;
-        state.totalDeleteTimeMS += deleteTimeMS;
-        state.totalAddTimeMS += addTimeMS;
+        state.totalDeleteTimeNS += deleteTimeNS;
+        state.totalAddTimeNS += addTimeNS;
+        state.minAddTimeNS = Math.min(state.minAddTimeNS, addTimeNS);
+        state.maxAddTimeNS = Math.max(state.maxAddTimeNS, addTimeNS);
+        state.minDeleteTimeNS = Math.min(state.minDeleteTimeNS, deleteTimeNS);
+        state.maxDeleteTimeNS = Math.max(state.maxDeleteTimeNS, deleteTimeNS);
       }
     }
   }
 
   static class TestState {
     int totalInstructions = 0;
-    long totalDeleteTimeMS = 0;
-    long totalAddTimeMS = 0;
-    int totalNodes = 0;
-    int totalPointsTo = 0;
+    long totalDeleteTimeNS = 0;
+    long maxDeleteTimeNS = 0;
+    long minDeleteTimeNS = Long.MAX_VALUE;
+    long totalAddTimeNS = 0;
+    long maxAddTimeNS = 0;
+    long minAddTimeNS = Long.MAX_VALUE;
+    long totalNodes = 0;
+    long totalPointsTo = 0;
+    long pagConstructionMS = 0;
   }
 
   private static <T> T swallow(Callable<T> f) {

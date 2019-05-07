@@ -79,13 +79,18 @@ public final class Main {
       var state = new TestState();
       asts.forEach(ast -> benchmarker.test(ast, ctxBuilder, state));
       System.out.printf("===== Total statistics (%s): =====\n", ctxBuilder);
+      System.out.printf("  Make init PAG: \t%.3fs\n", state.pagConstructionMS / 1_000D);
       System.out.printf("  Total nodes:   \t%d\n", state.totalNodes);
       System.out.printf("  Total pts:     \t%d\n", state.totalPointsTo);
       System.out.printf("  Total add/dels:\t%d\n", state.totalInstructions);
-      System.out.printf("  Total del time:\t%.3fs\n", state.totalDeleteTimeMS / 1000D);
-      System.out.printf("  Mean del time: \t%.3fs\n", state.totalDeleteTimeMS / 1000D / state.totalInstructions);
-      System.out.printf("  Total add time:\t%.3fs\n", state.totalAddTimeMS / 1000D);
-      System.out.printf("  Mean add time: \t%.3fs\n", state.totalAddTimeMS / 1000D / state.totalInstructions);
+      System.out.printf("  Total del time:\t%.3fms\n", state.totalDeleteTimeNS / 1_000_000D);
+      System.out.printf("  Mean del time: \t%.3fms\n", state.totalDeleteTimeNS / 1_000_000D / state.totalInstructions);
+      System.out.printf("  Max del time:  \t%.3fms\n", state.maxDeleteTimeNS / 1_000_000D);
+      System.out.printf("  Min del time:  \t%.3fms\n", state.minDeleteTimeNS / 1_000_000D);
+      System.out.printf("  Total add time:\t%.3fms\n", state.totalAddTimeNS / 1_000_000D);
+      System.out.printf("  Mean add time: \t%.3fms\n", state.totalAddTimeNS / 1_000_000D / state.totalInstructions);
+      System.out.printf("  Max add time:  \t%.3fms\n", state.maxAddTimeNS / 1_000_000D);
+      System.out.printf("  Min add time:  \t%.3fms\n", state.minAddTimeNS / 1_000_000D);
     }
   }
 }

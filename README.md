@@ -18,16 +18,10 @@ To run the pointer analysis on the series of benchmarks (about 11 minutes):
 $ gradle run
 ```
 
-To run the pointer analysis, verifying correctness (expensive):
+To run the pointer analysis, verifying correctness:
 
 ```
-$ IPA_DEBUG= gradle run
-```
-
-To get more printouts, you can also add verbosity:
-
-```
-$ IPA_DEBUG= IPA_VERBOSE= gradle run
+$ IPA_DEBUG=1 gradle run
 ```
 
 To run the unit tests:
@@ -37,5 +31,6 @@ $ gradle test
 ```
 
 The properties of correctness that `IPA_DEBUG` checks are the following:
-  * Removing and then re-adding a statement from the program acts as the identity function on the pointer analysis graph. (I.e., adding an edge reverses the changes induced by removing that edge.)
-  * For each node in the pointer analysis graph, its points-to set is exactly the union of its predecessors (except for any allocation site, whose points-to sets is exactly itself).
+  * At >=1, that removing and then re-adding a statement from the program acts as the identity function on the pointer analysis graph. (I.e., adding an edge reverses the changes induced by removing that edge.)
+  * At >=2, that for each node in the pointer analysis graph, its points-to set is exactly the union of its predecessors (except for any allocation site, whose points-to sets is exactly itself).
+  * At >=3, also prints verbose debugging information.

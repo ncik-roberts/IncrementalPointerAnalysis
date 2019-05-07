@@ -327,15 +327,58 @@ public class IncrementalPointsToGraphBuilder<C> {
         return result;
       }
 
-      // TODO: add functions
       @Override
-      public Set<Pair<Node, Node>> visitStaticInvocation(StaticInvocation i) {
-        return Set.of();
+      public Set<Pair<Node, Node>> visitStaticInvocation(StaticInvocation s) {
+        var optF = ast.staticFunction(s.method());
+        if (optF.isEmpty()) return Set.of();
+        var f = optF.get();
+        var params = f.params();
+        var args = s.arguments();
+        var returns = f.body().returns();
+        return it(params, args, returns, s.target());
+      }
+      
+      Set<Pair<Node, Node>> it(List<Ast.Variable> params, List<Ast.Variable> args, List<Ast.Instruction.Return> returns, Optional<Ast.Variable> target) {
+        var result = new LinkedHashSet<Pair<Node, Node>>();
+        int n = Math.min(args.size(), params.size());
+        for (int i = 0; i < n; i++) {
+          int iCopy = i;
+          Optional.ofNullable(variables.get(args.get(i))).ifPresent(
+              n1 -> Optional.ofNullable(variables.get(params.get(iCopy))).ifPresent(
+              n2 -> result.add(Pair.of(n1, n2))));
+        }
+
+        // Add edge from return z to target x
+        target.ifPresent(t -> {
+          Optional.ofNullable(variables.get(t)).ifPresent(x -> {
+            for (var ret : returns) {
+              Optional.ofNullable(variables.get(ret.returned())).ifPresent(z -> result.add(Pair.of(x, z)));
+            }
+          });
+        });
+        
+        return result;
       }
 
       @Override
       public Set<Pair<Node, Node>> visitInvocation(Invocation i) {
-        return Set.of();
+        var node = variables.get(i.source());
+        var acc = new LinkedHashSet<Pair<Node, Node>>();
+        var m = i.method();
+        if (node == null) return acc;
+        for (var c : contextsForNode.get(node)) {
+          var nodeWithContext = Pair.of(node, c);
+          for (var pair : result.pointsTo(nodeWithContext)) {
+            var heapItem = pair.fst();
+            ast.instanceMethod(heapItem.type(), m).ifPresent(f -> {
+              List<Ast.Variable> args = new ArrayList<>();
+              args.add(i.source());
+              args.addAll(i.arguments());
+              acc.addAll(it(f.params(), args, f.body().returns(), i.target()));
+            });
+          }
+        }
+        return acc;
       }
 
       @Override
