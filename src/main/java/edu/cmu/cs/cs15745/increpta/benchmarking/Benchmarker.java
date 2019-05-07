@@ -34,6 +34,7 @@ import edu.cmu.cs.cs15745.increpta.util.Pair;
 public final class Benchmarker {
 
   private static final boolean DEBUG = System.getenv("IPA_DEBUG") != null;
+  private static final boolean VERBOSE = System.getenv("IPA_VERBOSE") != null;
   private final AnalysisScope scope;
   private final ClassHierarchy cha;
 
@@ -55,7 +56,7 @@ public final class Benchmarker {
     }
   }
   
-  public <C> void test(String mainClassName, ContextBuilder<C> ctxBuilder, TestState state) {
+  public Ast getAst(String mainClassName) {
     System.out.println("Starting analysis on " + mainClassName);
     long pointStart = System.currentTimeMillis();
 
@@ -76,6 +77,12 @@ public final class Benchmarker {
     long timeAST = pointAST - pointCFG;
     System.out.println(String.format("\tAST conversion: %.3fs", timeAST / 1000D));
 
+    return ast;
+  }
+  
+  public <C> void test(Ast ast, ContextBuilder<C> ctxBuilder, TestState state) {
+    long pointStart = System.currentTimeMillis();
+
     // Starting building pointsToGraph
     var builder = new IncrementalPointsToGraphBuilder<>(ast, new SimplePointsToGraphWithContext<>(),
         ctxBuilder);
@@ -84,10 +91,12 @@ public final class Benchmarker {
     pag.checkInvariant(); // make sure it was correctly constructed
 
     long pointPAG = System.currentTimeMillis();
-    long timePAG = pointPAG - pointAST;
+    long timePAG = pointPAG - pointStart;
     System.out.println(String.format("\tPAG construction: %.3fs", timePAG / 1000D));
-    System.out.println("There are " + pag.nodes().size() + " nodes with "
-        + pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum() + " pointed to.");
+
+    // Accumulate the number of nodes and the size of points-to sets.
+    state.totalNodes += pag.nodes().size();
+    state.totalPointsTo = pag.nodes().stream().mapToInt(n -> pag.pointsTo(n).size()).sum();
 
     // Test static methods
     var pagCopy = pag.clone();
@@ -117,7 +126,7 @@ public final class Benchmarker {
       Set<Pair<Node, C>> affectedNodes = new LinkedHashSet<>();
 
       /******** DELETION CITY ********/
-      if (DEBUG)
+      if (VERBOSE)
         System.err.println("Deleting SSA Instruction: " + inst + " (" + edges + ")");
       long deletePointMS = System.currentTimeMillis();
       for (var edge : edges) {
@@ -128,7 +137,7 @@ public final class Benchmarker {
         pag.checkInvariant();
       
       /******** ADDITION CITY ********/
-      if (DEBUG)
+      if (VERBOSE)
         System.err.println("Adding SSA Instruction: " + inst + " (" + edges + ")");
       long addPointMS = System.currentTimeMillis();
       for (var edge : edges) {
@@ -139,28 +148,28 @@ public final class Benchmarker {
         pag.checkInvariant();
 
       if (affectedNodes.size() > 0) {
-        // Verify correctness by checking old pag vs. current pag
         if (DEBUG) {
+          // Verify correctness by checking old pag vs. current pag
           System.err.println("Checking correctness on " + affectedNodes.size() + " nodes...");
-        }
 
-        for (var node : affectedNodes) {
-          var oldPTS = pagCopy.pointsTo(node);
-          var newPTS = pag.pointsTo(node);
-          if (!oldPTS.equals(newPTS)) {
-            System.err.println("Old PTS: " + oldPTS);
-            System.err.println("New PTS: " + newPTS);
-            System.err.println("For node: " + node);
-            System.err.println("For instruction: " + inst);
-            throw new IllegalStateException("It is illegal to be wrong.");
+          for (var node : affectedNodes) {
+            var oldPTS = pagCopy.pointsTo(node);
+            var newPTS = pag.pointsTo(node);
+            if (!oldPTS.equals(newPTS)) {
+              System.err.println("Old PTS: " + oldPTS);
+              System.err.println("New PTS: " + newPTS);
+              System.err.println("For node: " + node);
+              System.err.println("For instruction: " + inst);
+              throw new IllegalStateException("It is illegal to be wrong.");
+            }
           }
-        }
 
-        if (DEBUG)
-          System.err.println("Verified correctness! :)");
+          if (VERBOSE)
+            System.err.println("Verified correctness! :)");
+        }
 
         // We done
-        if (DEBUG)
+        if (VERBOSE)
           System.err.printf("Delete time: %.3fs\nAdd time: %.3fs\n", deleteTimeMS / 1000D, addTimeMS / 1000D);
 
         state.totalInstructions++;
@@ -174,6 +183,8 @@ public final class Benchmarker {
     int totalInstructions = 0;
     long totalDeleteTimeMS = 0;
     long totalAddTimeMS = 0;
+    int totalNodes = 0;
+    int totalPointsTo = 0;
   }
 
   private static <T> T swallow(Callable<T> f) {
